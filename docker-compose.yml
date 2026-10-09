@@ -1,0 +1,44 @@
+# Local development dependencies. The apps themselves run on the host for now;
+# they get containers in stage 5b.
+#
+# Ports are bound to 127.0.0.1 so nothing here is reachable from the network.
+
+name: jobpilot
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-jobpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-jobpilot_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-jobpilot}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5434}:5432'
+    volumes:
+      # Postgres 18+ keeps data in a versioned directory under this path.
+      # (17 and earlier used /var/lib/postgresql/data.)
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    # appendonly: queued jobs survive a Redis restart.
+    # noeviction: BullMQ requires that Redis never evicts keys under memory pressure.
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
