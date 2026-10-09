@@ -15,7 +15,7 @@ This is a learning and portfolio project built in stages. **Current state: stage
 ```bash
 cp .env.example .env    # local-only values, safe defaults
 pnpm install
-pnpm infra:up           # Postgres + Redis, returns when both are healthy
+pnpm infra:up           # Postgres, Redis, MinIO; returns when all are healthy
 pnpm build              # generates the Prisma client, compiles packages
 pnpm db:deploy          # applies migrations
 pnpm db:seed            # sample data; safe to run repeatedly
@@ -30,10 +30,11 @@ pnpm --filter @jobpilot/db studio
 
 Stop everything with `pnpm infra:down`. Data lives in named Docker volumes and survives that; `docker compose down -v` deletes it.
 
-| Service  | Host address     | Notes                                                        |
-| -------- | ---------------- | ------------------------------------------------------------ |
-| Postgres | `localhost:5434` | 5432 is left free for a locally installed Postgres           |
-| Redis    | `localhost:6379` | AOF persistence on, `noeviction` policy (required by BullMQ) |
+| Service  | Host address     | Notes                                                                         |
+| -------- | ---------------- | ----------------------------------------------------------------------------- |
+| Postgres | `localhost:5434` | 5432 is left free for a locally installed Postgres                            |
+| Redis    | `localhost:6379` | AOF persistence on, `noeviction` policy (required by BullMQ)                  |
+| MinIO    | `localhost:9000` | S3 API. Web console on `localhost:9001`, login is the S3 key pair from `.env` |
 
 ## Layout
 
@@ -43,7 +44,7 @@ packages/
   shared/           Zod schemas and inferred types; no Node- or database-specific code
   db/               Prisma schema, migrations, seed, and the generated client
 infra/docker/       Dockerfiles (stage 5b)
-docker-compose.yml  local Postgres and Redis
+docker-compose.yml  local Postgres, Redis and MinIO
 ```
 
 Dependencies point one way: `apps → db → shared`. `shared` must stay importable from the browser, so it never imports `db`.
@@ -68,6 +69,7 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 - **Prisma pinned to 7.x.** npm's `latest` tag currently points at an 8.0 release candidate.
 - **Prisma lives in `packages/db`.** Prisma 7 generates the client into the source tree (`src/generated`, gitignored), so one package owns the schema and exports the client to every app.
 - **The connection URL is in `prisma.config.ts`**, read from the root `.env`. `createPrismaClient()` takes the URL as an argument: library code never reads `process.env`.
+- **Local S3 is MinIO from Chainguard's image, pinned by digest.** MinIO stopped publishing its own images and archived the repository; for a localhost-only dependency the frozen upstream is acceptable. Production uses AWS S3.
 - **Scores are per user**: `listing_scores (user_id, job_listing_id)` rather than a column on `job_listings`, which is shared by all users.
 - **UUIDv7 primary keys, `timestamptz` timestamps, snake_case tables and columns.**
 - **No secondary indexes yet.** Each index is added with the query it serves and an `EXPLAIN ANALYZE` before and after. Postgres does not index foreign keys automatically.

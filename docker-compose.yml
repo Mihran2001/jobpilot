@@ -1,4 +1,4 @@
-# Local development dependencies. The apps themselves run on the host for now;
+# Local development dependencies: Postgres, Redis and S3-compatible storage. The apps themselves run on the host for now;
 # they get containers in stage 5b.
 #
 # Ports are bound to 127.0.0.1 so nothing here is reachable from the network.
@@ -39,6 +39,27 @@ services:
       timeout: 3s
       retries: 10
 
+  # S3-compatible object storage. MinIO's own images are no longer published,
+  # so this is Chainguard's build, pinned by digest (their free tier only
+  # offers the moving `latest` tag). Contains MinIO RELEASE.2026-09-22.
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:25bc63a89475bc494bfbce9bbeddb0421aece3f3968d77c809db5104d07b4545
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-jobpilot}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-jobpilot_dev_secret}
+    ports:
+      - '127.0.0.1:${S3_PORT:-9000}:9000' # S3 API
+      - '127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001' # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   postgres-data:
   redis-data:
+  minio-data:
