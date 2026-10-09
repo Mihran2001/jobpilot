@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Prisma client is generated from the schema on install/build
+packages/db/src/generated/
+
+# Secrets: only .env.example is committed
+.env
+.env.*
+!.env.example
+
+.next/
+coverage/
+.DS_Store
+*.log
