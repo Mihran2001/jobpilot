@@ -123,6 +123,10 @@ model JobListing {
 
   // The idempotency key for ingestion: fetching a source twice upserts on this.
   @@unique([sourceId, externalId])
+  // The listings feed: ORDER BY posted_at DESC, id DESC with a keyset cursor.
+  // 100k rows: first page 11.2 ms -> 0.07 ms, deep page 8.0 ms -> 0.03 ms
+  // (packages/db/explain/listings-feed.sql).
+  @@index([postedAt(sort: Desc), id(sort: Desc)], map: "job_listings_posted_at_id_idx")
   @@map("job_listings")
 }
 
