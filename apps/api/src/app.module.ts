@@ -7,6 +7,8 @@ import { PrismaModule } from './infra/prisma/prisma.module.js';
 import { loggerParams } from './logging.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { ListingsModule } from './modules/listings/listings.module.js';
+import { SourcesModule } from './modules/sources/sources.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 @Module({})
@@ -25,6 +27,8 @@ export class AppModule {
         HealthModule,
         AuthModule,
         UsersModule,
+        SourcesModule,
+        ListingsModule,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
