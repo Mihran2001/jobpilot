@@ -4,17 +4,19 @@
 // this twice leaves the same rows as running it once.
 
 import { parseEnv, type ApplicationStatus } from '@jobpilot/shared';
+import { hash } from '@node-rs/argon2';
 import { z } from 'zod';
 import { createPrismaClient } from '../src/index.js';
 
-const env = parseEnv(z.object({ DATABASE_URL: z.url() }));
+const env = parseEnv(
+  z.object({
+    DATABASE_URL: z.url(),
+    SEED_USER_PASSWORD: z.string().min(12),
+  }),
+);
 const prisma = createPrismaClient({ connectionString: env.DATABASE_URL });
 
 const SEED_USER_EMAIL = 'dev@jobpilot.test';
-
-// Not a valid Argon2 hash, so no password can ever match it: the account is
-// locked until stage 2 adds real hashing and updates this seed.
-const LOCKED_PASSWORD_HASH = '!locked';
 
 const sources = [
   // Placeholders. Real sources are chosen in stage 3 after checking their terms.
@@ -171,10 +173,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (days: number) => new Date(Date.now() - days * DAY_MS);
 
 async function main() {
+  // Same Argon2id defaults as the API, so this user can log in through it.
+  // Re-hashed on every run, so changing SEED_USER_PASSWORD takes effect.
+  const passwordHash = await hash(env.SEED_USER_PASSWORD);
   const user = await prisma.user.upsert({
     where: { email: SEED_USER_EMAIL },
-    update: {},
-    create: { email: SEED_USER_EMAIL, passwordHash: LOCKED_PASSWORD_HASH },
+    update: { passwordHash },
+    create: { email: SEED_USER_EMAIL, passwordHash },
   });
 
   const profile = {
