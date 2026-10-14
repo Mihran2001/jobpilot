@@ -5,6 +5,7 @@ import { PrismaExceptionFilter } from './common/prisma-exception.filter.js';
 import { APP_CONFIG, type AppConfig } from './config/config.js';
 import { PrismaModule } from './infra/prisma/prisma.module.js';
 import { loggerParams } from './logging.js';
+import { ApplicationsModule } from './modules/applications/applications.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { ListingsModule } from './modules/listings/listings.module.js';
@@ -29,6 +30,7 @@ export class AppModule {
         UsersModule,
         SourcesModule,
         ListingsModule,
+        ApplicationsModule,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
