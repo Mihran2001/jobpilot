@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Nest's dependency injection reads constructor parameter types at
+    // runtime; these two flags make TypeScript emit that metadata.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    // DI-populated fields are assigned by Nest, not in the constructor.
+    "strictPropertyInitialization": false,
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}
