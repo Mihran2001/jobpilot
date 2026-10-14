@@ -17,6 +17,25 @@ export default defineConfig(
     },
   },
   {
+    rules: {
+      // `_name` marks a value as deliberately unused, e.g. a property removed
+      // with rest destructuring.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
+    },
+  },
+  {
+    // Tests assert on raw JSON response bodies, which are untyped by nature.
+    files: ['**/*.spec.ts', '**/test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+    },
+  },
+  {
     files: ['**/*.js'],
     extends: [tseslint.configs.disableTypeChecked],
   },

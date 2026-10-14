@@ -5,7 +5,9 @@ import { PrismaExceptionFilter } from './common/prisma-exception.filter.js';
 import { APP_CONFIG, type AppConfig } from './config/config.js';
 import { PrismaModule } from './infra/prisma/prisma.module.js';
 import { loggerParams } from './logging.js';
+import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { UsersModule } from './modules/users/users.module.js';
 
 @Module({})
 export class AppModule {
@@ -17,7 +19,13 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [LoggerModule.forRoot(loggerParams(config)), PrismaModule, HealthModule],
+      imports: [
+        LoggerModule.forRoot(loggerParams(config)),
+        PrismaModule,
+        HealthModule,
+        AuthModule,
+        UsersModule,
+      ],
       providers: [
         { provide: APP_CONFIG, useValue: config },
         // Registered as providers (not in main.ts) so tests get them too.

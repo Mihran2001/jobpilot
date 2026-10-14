@@ -12,12 +12,16 @@ export interface TestApp {
 }
 
 /** Boots the real AppModule against the test database. */
-export async function createTestApp(): Promise<TestApp> {
+export async function createTestApp(overrides: Partial<AppConfig> = {}): Promise<TestApp> {
   const config: AppConfig = {
     NODE_ENV: 'test',
     API_PORT: 0,
     DATABASE_URL: inject('databaseUrl'),
+    SESSION_TTL_DAYS: 7,
+    // High by default so ordinary tests never trip it; the rate-limit test lowers it.
+    AUTH_RATE_LIMIT_PER_MINUTE: 1000,
     LOG_LEVEL: 'silent',
+    ...overrides,
   };
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule.register(config)],
