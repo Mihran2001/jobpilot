@@ -6,7 +6,7 @@ This is a learning and portfolio project built in stages. **Current state: stage
 
 ## Requirements
 
-- Node 22.13 or newer (`.nvmrc` pins 22)
+- Node 24.15 or newer (`.nvmrc` pins 24)
 - pnpm 10 (`corepack enable` picks up the version pinned in `package.json`)
 - Docker with Compose
 
@@ -64,7 +64,7 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 ## Decisions
 
 - **pnpm workspaces, no Turborepo.** Two packages and three apps do not need a task cache. Revisit when CI time is measurable.
-- **Packages are ESM compiled to `dist` with `tsc`.** Node 22 can `require()` ESM, so a CommonJS consumer still works.
+- **Packages are ESM compiled to `dist` with `tsc`.** Node 24 can `require()` ESM, so a CommonJS consumer still works.
 - **TypeScript 6.0, not 7.** typescript-eslint supports TypeScript below 6.1 as of October 2026.
 - **Prisma pinned to 7.x.** npm's `latest` tag currently points at an 8.0 release candidate.
 - **Prisma lives in `packages/db`.** Prisma 7 generates the client into the source tree (`src/generated`, gitignored), so one package owns the schema and exports the client to every app.

@@ -43,7 +43,7 @@ It is a single-user app first (me), but the code should have real auth and be wr
 | Cloud         | AWS, introduced only in stage 6                                                                                                                                   |
 | Shared        | `packages/shared` with Zod schemas and inferred types used by web and api                                                                                         |
 
-Local environment: macOS, Node 22, Postgres.app installed locally on port 5432. The project database runs in Docker Compose on host port 5434.
+Local environment: macOS, Node 24 LTS (installed with nvm; `.nvmrc` pins 24), Postgres.app installed locally on port 5432. The project database runs in Docker Compose on host port 5434.
 
 ## 4. Architecture
 
@@ -204,3 +204,8 @@ pnpm lint             ESLint over the whole repo
 - **Prisma is pinned to 7.x**: the npm `latest` tag points at an 8.0 release candidate.
 - **Local S3 storage:** MinIO via `cgr.dev/chainguard/minio`, pinned by digest. The official `minio/minio` images can no longer be pulled.
 - **Host ports:** Postgres 5434, Redis 6379, MinIO 9000 (API) and 9001 (console).
+- **Node 24 LTS** (from stage 2): the NestJS 12 CLI needs Node 22.22.3+ or 24.15+, and Node 22 reaches end of life in April 2027.
+- **Auth:** server-side sessions stored in Postgres. A random token goes in an `httpOnly` cookie; only its SHA-256 hash is stored in a `sessions` table. Chosen over Redis sessions (library hides the mechanism) and JWT + refresh tokens (revocation needs a token store anyway).
+- **Password hashing:** Argon2id via `@node-rs/argon2` (prebuilt binaries, no install script).
+- **API validation:** NestJS 12's built-in `StandardSchemaValidationPipe` with the Zod schemas from `packages/shared`; no `nestjs-zod`.
+- **API tests:** Vitest + supertest (NestJS 12's default for ESM projects), against a separate `jobpilot_test` database.
