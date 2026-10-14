@@ -202,3 +202,5 @@ pnpm lint             ESLint over the whole repo
 - **Packages are ESM** and compile to `dist` with `tsc`.
 - **TypeScript 6.0.x**, not 7: typescript-eslint supports `<6.1.0` as of October 2026.
 - **Prisma is pinned to 7.x**: the npm `latest` tag points at an 8.0 release candidate.
+- **Local S3 storage:** MinIO via `cgr.dev/chainguard/minio`, pinned by digest. The official `minio/minio` images can no longer be pulled.
+- **Host ports:** Postgres 5434, Redis 6379, MinIO 9000 (API) and 9001 (console).

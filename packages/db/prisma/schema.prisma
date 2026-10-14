@@ -1,0 +1,171 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+// The connection URL lives in prisma.config.ts (Prisma 7).
+datasource db {
+  provider = "postgresql"
+}
+
+// Conventions
+// - Prisma names are camelCase/PascalCase; tables and columns are snake_case
+//   via @map/@@map, so hand-written SQL needs no quoting.
+// - Ids are UUIDv7: time-ordered, so new rows land at the end of the primary
+//   key index and ids can double as a creation-order cursor.
+// - Timestamps are timestamptz: an absolute instant, not a wall-clock reading.
+// - No secondary indexes yet. Each one is added later next to the query it
+//   serves, with EXPLAIN ANALYZE before and after. Note that Postgres does not
+//   index foreign key columns on its own.
+
+enum SourceKind {
+  API
+  RSS
+
+  @@map("source_kind")
+}
+
+enum ApplicationStatus {
+  SAVED
+  APPLIED
+  INTERVIEW
+  OFFER
+  REJECTED
+
+  @@map("application_status")
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  skillProfile  SkillProfile?
+  listingScores ListingScore[]
+  applications  Application[]
+  cvVersions    CvVersion[]
+
+  @@map("users")
+}
+
+model SkillProfile {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  userId         String   @unique @map("user_id") @db.Uuid
+  skills         String[]
+  preferredRoles String[] @map("preferred_roles")
+  minSalary      Int?     @map("min_salary")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("skill_profiles")
+}
+
+model Source {
+  id            String     @id @default(uuid(7)) @db.Uuid
+  name          String     @unique
+  kind          SourceKind
+  url           String
+  enabled       Boolean    @default(true)
+  lastFetchedAt DateTime?  @map("last_fetched_at") @db.Timestamptz(3)
+
+  listings JobListing[]
+
+  @@map("sources")
+}
+
+model Company {
+  id   String @id @default(uuid(7)) @db.Uuid
+  name String @unique
+
+  listings JobListing[]
+
+  @@map("companies")
+}
+
+// Shared by all users: nothing user-specific belongs on this table.
+model JobListing {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  sourceId    String   @map("source_id") @db.Uuid
+  externalId  String   @map("external_id")
+  companyId   String   @map("company_id") @db.Uuid
+  title       String
+  description String
+  url         String
+  location    String
+  remote      Boolean
+  salaryMin   Int?     @map("salary_min")
+  salaryMax   Int?     @map("salary_max")
+  postedAt    DateTime @map("posted_at") @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  source       Source         @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  scores       ListingScore[]
+  applications Application[]
+
+  // The idempotency key for ingestion: fetching a source twice upserts on this.
+  @@unique([sourceId, externalId])
+  @@map("job_listings")
+}
+
+// A score belongs to a (user, listing) pair, so that pair is the primary key.
+model ListingScore {
+  userId       String   @map("user_id") @db.Uuid
+  jobListingId String   @map("job_listing_id") @db.Uuid
+  score        Int
+  scoredAt     DateTime @default(now()) @map("scored_at") @db.Timestamptz(3)
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobListing JobListing @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, jobListingId])
+  @@map("listing_scores")
+}
+
+model Application {
+  id           String            @id @default(uuid(7)) @db.Uuid
+  userId       String            @map("user_id") @db.Uuid
+  jobListingId String            @map("job_listing_id") @db.Uuid
+  status       ApplicationStatus @default(SAVED)
+  appliedAt    DateTime?         @map("applied_at") @db.Timestamptz(3)
+  notes        String?
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobListing JobListing         @relation(fields: [jobListingId], references: [id], onDelete: Restrict)
+  events     ApplicationEvent[]
+  cvVersions CvVersion[]
+
+  @@unique([userId, jobListingId])
+  @@map("applications")
+}
+
+// Append-only history of status changes. fromStatus is null for the first event.
+model ApplicationEvent {
+  id            String             @id @default(uuid(7)) @db.Uuid
+  applicationId String             @map("application_id") @db.Uuid
+  fromStatus    ApplicationStatus? @map("from_status")
+  toStatus      ApplicationStatus  @map("to_status")
+  note          String?
+  createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("application_events")
+}
+
+model CvVersion {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  applicationId String?  @map("application_id") @db.Uuid
+  s3Key         String   @map("s3_key")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@map("cv_versions")
+}
