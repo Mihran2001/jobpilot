@@ -47,8 +47,23 @@ model User {
   listingScores ListingScore[]
   applications  Application[]
   cvVersions    CvVersion[]
+  sessions      Session[]
 
   @@map("users")
+}
+
+// A logged-in browser. The cookie holds a random token; only its SHA-256 hash
+// is stored, so a copy of this table cannot be used to log in.
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
 }
 
 model SkillProfile {
