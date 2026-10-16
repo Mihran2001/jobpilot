@@ -173,6 +173,11 @@ model ApplicationEvent {
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
+  // Detail view (WHERE application_id = $1 ORDER BY created_at) and the
+  // cascade delete from applications. 200k events: 4.1 ms -> 0.06 ms
+  // (packages/db/explain/application-events.sql).
+  @@index([applicationId, createdAt], map: "application_events_application_id_created_at_idx")
+
   @@map("application_events")
 }
 
