@@ -63,6 +63,7 @@ All routes are under `/api` and need a session cookie unless marked public.
 | `POST /applications`             | Save a listing as an application (status `SAVED`)                                                              |
 | `GET /applications`              | Your applications plus a count per status; filter with `status`                                                |
 | `GET /applications/:id`          | One application with its status history                                                                        |
+| `PATCH /applications/:id`        | Edit notes (`null` clears them)                                                                                |
 | `PATCH /applications/:id/status` | Move to a new status; records an event in the same transaction                                                 |
 
 Request and response shapes are the Zod schemas in `packages/shared`.
@@ -111,7 +112,7 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 - **Local S3 is MinIO from Chainguard's image, pinned by digest.** MinIO stopped publishing its own images and archived the repository; for a localhost-only dependency the frozen upstream is acceptable. Production uses AWS S3.
 - **Scores are per user**: `listing_scores (user_id, job_listing_id)` rather than a column on `job_listings`, which is shared by all users.
 - **UUIDv7 primary keys, `timestamptz` timestamps, snake_case tables and columns.**
-- **Indexes are added only with evidence.** Each one comes with the query it serves and an `EXPLAIN ANALYZE` before and after; Postgres does not index foreign keys automatically. So far: `job_listings (posted_at DESC, id DESC)` for the listings feed, measured in [listings-feed.sql](packages/db/explain/listings-feed.sql).
+- **Indexes are added only with evidence.** Each one comes with the query it serves and an `EXPLAIN ANALYZE` before and after; Postgres does not index foreign keys automatically. So far: `job_listings (posted_at DESC, id DESC)` for the listings feed ([listings-feed.sql](packages/db/explain/listings-feed.sql)) and `application_events (application_id, created_at)` for the application detail view and cascade deletes ([application-events.sql](packages/db/explain/application-events.sql)).
 - **Keyset pagination, written as a range.** The cursor condition is `posted_at <= x AND (posted_at < x OR id < y)`. The equivalent `posted_at < x OR (posted_at = x AND id < y)` cannot start the index scan at the cursor and was slower with the index than without it.
 - **Enums are declared twice** (Prisma schema and `packages/shared`) because the browser cannot import Prisma. `packages/db/src/enum-check.ts` fails the build if they differ.
 - **Sessions, not JWT.** A random 256-bit token in an `httpOnly`, `SameSite=Lax` cookie; Postgres stores only its SHA-256 hash. Logout and expiry take effect immediately. Every route needs a session unless it is marked `@Public()`.
