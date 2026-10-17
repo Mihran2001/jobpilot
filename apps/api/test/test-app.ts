@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@jobpilot/db';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -21,6 +22,10 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}): Promise
     // High by default so ordinary tests never trip it; the rate-limit test lowers it.
     AUTH_RATE_LIMIT_PER_MINUTE: 1000,
     LOG_LEVEL: 'silent',
+    REDIS_URL: inject('redisUrl'),
+    // A fresh prefix per app: this test's jobs are invisible to anything else.
+    BULLMQ_PREFIX: `test-${randomUUID()}`,
+    ...inject('storageEnv'),
     ...overrides,
   };
   const moduleRef = await Test.createTestingModule({

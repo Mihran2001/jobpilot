@@ -45,6 +45,8 @@ export interface Storage {
   readonly bucket: string;
   putObject(key: string, body: Uint8Array, contentType: string): Promise<void>;
   headObject(key: string): Promise<ObjectInfo | null>;
+  /** The first `length` bytes of an object (a ranged GET), e.g. to check a file signature. */
+  readPrefix(key: string, length: number): Promise<Uint8Array>;
   presignDownload(
     key: string,
     fileName: string,
@@ -101,6 +103,13 @@ export function createStorage(config: StorageConfig): Storage {
         if (err instanceof S3ServiceException && err.$metadata.httpStatusCode === 404) return null;
         throw err;
       }
+    },
+
+    async readPrefix(key, length) {
+      const res = await client.send(
+        new GetObjectCommand({ Bucket: bucket, Key: key, Range: `bytes=0-${length - 1}` }),
+      );
+      return (await res.Body?.transformToByteArray()) ?? new Uint8Array();
     },
 
     async presignDownload(key, fileName, expiresInSeconds = DEFAULT_EXPIRY_SECONDS) {
