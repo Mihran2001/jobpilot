@@ -9,7 +9,8 @@
     "start": "node dist/main.js",
     "fetch:now": "tsx src/cli/fetch-now.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "bench:score-lag": "tsx bench/score-lag.ts"
   },
   "dependencies": {
     "@bull-board/api": "9.10.4",
