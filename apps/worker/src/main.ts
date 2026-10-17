@@ -1,9 +1,13 @@
+import { access, constants } from 'node:fs/promises';
 import { createPrismaClient } from '@jobpilot/db';
+import { createStorage, storageConfigFromEnv } from '@jobpilot/storage';
 import { Worker } from 'bullmq';
 import { startBoard, type Board } from './board.js';
 import { loadConfig } from './config.js';
 import { loadRootEnvFile } from './env-file.js';
+import { htmlToPdf } from './cv/chrome.js';
 import { createFetchSourceProcessor } from './jobs/fetch-source.js';
+import { createGenerateCvProcessor } from './jobs/generate-cv.js';
 import { createScoreListingProcessor } from './jobs/score-listing.js';
 import { createLogger } from './logger.js';
 import { allQueues, createQueues, createRedis, enqueueScores, QUEUE } from './queues.js';
@@ -14,8 +18,17 @@ loadRootEnvFile();
 const config = loadConfig(); // fails here if the environment is invalid
 const logger = createLogger(config);
 
+// Fail at start, not on the first CV job, if Chrome is not where we were told.
+await access(config.CHROME_PATH, constants.X_OK).catch(() => {
+  throw new Error(`CHROME_PATH is not an executable: ${config.CHROME_PATH}`);
+});
+
 const prisma = createPrismaClient({ connectionString: config.DATABASE_URL });
+const storage = createStorage(storageConfigFromEnv(config));
+if (config.S3_CREATE_BUCKET) await storage.ensureBucket();
 const connection = createRedis(config.REDIS_URL);
+// Reconnects happen on their own; log them instead of crashing on an unhandled 'error'.
+connection.on('error', (err) => logger.warn({ err }, 'Redis connection error'));
 const queues = createQueues(connection);
 const adapters = createAdapterRegistry(fetch);
 
@@ -35,6 +48,21 @@ const workers = [
     connection,
     concurrency: config.SCORE_CONCURRENCY,
   }),
+  new Worker(
+    QUEUE.generateCv,
+    createGenerateCvProcessor({
+      prisma,
+      storage,
+      logger,
+      renderPdf: (html) =>
+        htmlToPdf(html, {
+          chromePath: config.CHROME_PATH,
+          timeoutMs: config.CV_RENDER_TIMEOUT_MS,
+          noSandbox: config.CHROME_NO_SANDBOX,
+        }),
+    }),
+    { connection, concurrency: config.CV_CONCURRENCY },
+  ),
 ];
 
 for (const worker of workers) {
@@ -88,6 +116,7 @@ async function shutdown(signal: string): Promise<void> {
   await Promise.all(workers.map((w) => w.close())); // waits for active jobs
   await Promise.all(allQueues(queues).map((q) => q.close()));
   await connection.quit();
+  storage.destroy();
   await prisma.$disconnect();
   logger.info('Shutdown complete');
   process.exit(0);

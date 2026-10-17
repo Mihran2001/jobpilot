@@ -11,4 +11,6 @@ type Assert<T extends true> = T;
 export type EnumChecks = [
   Assert<Equal<db.ApplicationStatus, shared.ApplicationStatus>>,
   Assert<Equal<db.SourceKind, shared.SourceKind>>,
+  Assert<Equal<db.CvStatus, shared.CvStatus>>,
+  Assert<Equal<db.CvSource, shared.CvSource>>,
 ];

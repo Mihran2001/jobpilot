@@ -3,7 +3,7 @@
 // Every write is an upsert on a unique key (or guarded by a lookup), so running
 // this twice leaves the same rows as running it once.
 
-import { parseEnv, type ApplicationStatus } from '@jobpilot/shared';
+import { cvProfileSchema, parseEnv, type ApplicationStatus } from '@jobpilot/shared';
 import { hash } from '@node-rs/argon2';
 import { z } from 'zod';
 import { createPrismaClient } from '../src/index.js';
@@ -220,6 +220,66 @@ async function main() {
     where: { userId: user.id },
     update: profile,
     create: { userId: user.id, ...profile },
+  });
+
+  // An EXAMPLE CV so CV generation works out of the box. Replace it with your
+  // own through PUT /api/cv-profile (or the web UI) rather than editing it here,
+  // so your personal details never end up in git.
+  const cvProfile = cvProfileSchema.parse({
+    fullName: 'Alex Example',
+    headline: 'Full-stack engineer (React, Node.js)',
+    email: 'alex@example.com',
+    location: 'Remote, Europe',
+    links: [{ label: 'GitHub', url: 'https://github.com/example' }],
+    summary:
+      'Frontend engineer with six years of React and Next.js, now building full-stack: NestJS APIs, PostgreSQL schemas, background workers and the infrastructure to run them.',
+    skills: [
+      'TypeScript',
+      'React',
+      'Next.js',
+      'Node.js',
+      'NestJS',
+      'PostgreSQL',
+      'Prisma',
+      'Redis',
+      'Docker',
+    ],
+    experience: [
+      {
+        company: 'Example Commerce',
+        title: 'Senior Frontend Engineer',
+        start: '2022-01',
+        end: null,
+        highlights: [
+          'Led the migration of a large storefront to Next.js App Router and React Server Components',
+          'Built a Node.js BFF that cut page payloads by 40%',
+          'Introduced end-to-end TypeScript types shared between API and UI',
+        ],
+      },
+      {
+        company: 'Example Agency',
+        title: 'Frontend Engineer',
+        start: '2019-06',
+        end: '2021-12',
+        highlights: [
+          'Shipped React dashboards for a dozen clients',
+          'Set up CI with Docker-based preview environments',
+        ],
+      },
+    ],
+    education: [
+      {
+        school: 'Example University',
+        degree: 'BSc Computer Science',
+        start: '2015-09',
+        end: '2019-06',
+      },
+    ],
+  });
+  await prisma.cvProfile.upsert({
+    where: { userId: user.id },
+    update: {}, // never overwrite a CV the user has already edited
+    create: { userId: user.id, data: cvProfile },
   });
 
   const sourceIds = new Map<string, string>();

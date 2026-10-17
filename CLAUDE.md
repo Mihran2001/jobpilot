@@ -13,7 +13,7 @@ This project is for learning and for my portfolio. The code matters less than my
 - **Ask before big decisions** (libraries, architecture changes, schema changes). Give me 2–3 options with tradeoffs and a recommendation.
 - **Don't add technology for show.** If something (for example `worker_threads`) is not justified by a measured need, tell me instead of adding it. If I ask for something that is a bad idea, say so and explain.
 - **Verify versions against current docs.** Prisma 7, NestJS, and Next.js have all changed recently. Do not rely on memory for setup steps. Check the official docs for the installed version.
-- **Leave me tasks.** At the end of each stage, give me 2–3 small things to implement or break myself (for example "add an index and check the query plan", "kill the worker mid-job and see what happens").
+- **Leave me tasks.** For each stage, add 2–3 small things to implement or break myself to `docs/TASKS.md` (for example "add an index and check the query plan", "kill the worker mid-job and see what happens"). I do them together at the end, so keep each task self-contained with exact files and commands.
 - Keep explanations concrete: trace real examples with our actual data instead of abstract descriptions.
 
 ## 2. What we are building
@@ -213,3 +213,5 @@ pnpm lint             ESLint over the whole repo
 - **Salaries:** only USD per year is stored; other currencies and hourly/monthly rates become null.
 - **Worker:** plain Node + BullMQ 6 (ioredis connection), no Nest. Failed jobs visible in Bull Board on 127.0.0.1:3002.
 - **No worker_threads:** scoring measured at 0.15 ms per 24 KB listing; event loop p99 2.5 ms under a 5,000-job run (idle 1.9 ms).
+- **Working mode (from stage 4):** stages run back to back without waiting for "next"; tasks collect in `docs/TASKS.md`; each stage is merged into `main` once every check is green. Still stop for decisions (libraries, schema) and always before anything that costs money (stage 6).
+- **Stage 4:** CV PDFs are rendered by running headless Chrome directly as a child process (`CHROME_PATH`); the base CV lives in a `cv_profiles` table as JSON validated by a shared Zod schema; the CSV export reads through a Postgres server-side cursor (`pg-query-stream`).

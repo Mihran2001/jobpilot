@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
+import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
@@ -36,8 +37,10 @@ export default defineConfig(
     },
   },
   {
-    files: ['**/*.js'],
+    files: ['**/*.js', '**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
+    // Plain JavaScript run by Node: fetch, console, process, ... exist.
+    languageOptions: { globals: globals.node },
   },
   prettier,
 );

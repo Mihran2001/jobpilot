@@ -1,19 +1,19 @@
 import { Queue, type JobsOptions } from 'bullmq';
 import { Redis } from 'ioredis';
+import {
+  QUEUE,
+  type FetchSourceData,
+  type GenerateCvData,
+  type ScoreListingData,
+} from '@jobpilot/shared';
 
-export const QUEUE = {
-  fetchSource: 'fetch-source',
-  scoreListing: 'score-listing',
-} as const;
-
-export interface FetchSourceData {
-  sourceId: string;
-}
-
-export interface ScoreListingData {
-  userId: string;
-  jobListingId: string;
-}
+// Queue names and payloads are shared with the API, which enqueues generate-cv.
+export {
+  QUEUE,
+  type FetchSourceData,
+  type GenerateCvData,
+  type ScoreListingData,
+} from '@jobpilot/shared';
 
 /**
  * Fetching calls someone else's server: retry 5 times, waiting 1, 2, 4, 8
@@ -44,11 +44,13 @@ export function createRedis(url: string): Redis {
 export interface Queues {
   fetchSource: Queue<FetchSourceData>;
   scoreListing: Queue<ScoreListingData>;
+  /** Jobs are added by the API; the worker only needs the queue for Bull Board. */
+  generateCv: Queue<GenerateCvData>;
 }
 
 /** Every queue, for code that treats them alike (Bull Board, shutdown). */
 export function allQueues(queues: Queues): Queue[] {
-  return [queues.fetchSource, queues.scoreListing];
+  return [queues.fetchSource, queues.scoreListing, queues.generateCv];
 }
 
 export function createQueues(connection: Redis, prefix?: string): Queues {
@@ -63,6 +65,7 @@ export function createQueues(connection: Redis, prefix?: string): Queues {
       prefix,
       defaultJobOptions: SCORE_JOB_OPTIONS,
     }),
+    generateCv: new Queue<GenerateCvData>(QUEUE.generateCv, { connection, prefix }),
   };
 }
 

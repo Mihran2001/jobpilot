@@ -4,6 +4,12 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { prepareTestDatabase } from '@jobpilot/db/testing';
+import {
+  createStorage,
+  storageConfigFromEnv,
+  storageEnvSchema,
+  type StorageEnv,
+} from '@jobpilot/storage';
 import type { TestProject } from 'vitest/node';
 
 const ROOT_ENV = path.resolve(import.meta.dirname, '../../../.env');
@@ -16,10 +22,26 @@ export default async function setup(project: TestProject): Promise<void> {
 
   await prepareTestDatabase(testUrl);
   project.provide('databaseUrl', testUrl);
+
+  const redisUrl = process.env.TEST_REDIS_URL;
+  if (!redisUrl) throw new Error('TEST_REDIS_URL is not set (see .env.example)');
+  project.provide('redisUrl', redisUrl);
+
+  // The real storage settings, but the test bucket, created if missing.
+  const storageEnv = storageEnvSchema.parse({
+    ...process.env,
+    S3_BUCKET: process.env.TEST_S3_BUCKET,
+  });
+  const storage = createStorage(storageConfigFromEnv(storageEnv));
+  await storage.ensureBucket();
+  storage.destroy();
+  project.provide('storageEnv', storageEnv);
 }
 
 declare module 'vitest' {
   export interface ProvidedContext {
     databaseUrl: string;
+    redisUrl: string;
+    storageEnv: StorageEnv;
   }
 }
