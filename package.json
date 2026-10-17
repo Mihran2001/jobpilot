@@ -11,6 +11,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "dev:api": "pnpm --filter @jobpilot/api dev",
+    "dev:worker": "pnpm --filter @jobpilot/worker dev",
+    "fetch:now": "pnpm --filter @jobpilot/worker fetch:now",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
