@@ -1,0 +1,42 @@
+{
+  "name": "@jobpilot/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nest build",
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jobpilot/db": "workspace:*",
+    "@jobpilot/shared": "workspace:*",
+    "@nestjs/common": "12.1.3",
+    "@nestjs/core": "12.1.3",
+    "@nestjs/platform-express": "12.1.3",
+    "@nestjs/throttler": "6.7.1",
+    "@node-rs/argon2": "2.2.2",
+    "cookie-parser": "1.4.7",
+    "nestjs-pino": "5.3.1",
+    "pino": "10.4.0",
+    "pino-http": "11.0.0",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "12.0.8",
+    "@nestjs/schematics": "12.0.7",
+    "@nestjs/testing": "12.1.3",
+    "@types/cookie-parser": "1.4.10",
+    "@types/express": "5.0.6",
+    "@types/supertest": "7.2.1",
+    "pino-pretty": "13.2.0",
+    "supertest": "7.3.1",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
+  }
+}

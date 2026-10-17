@@ -1,5 +1,5 @@
 export { createPrismaClient, type CreatePrismaClientOptions } from './client.js';
-export { Prisma, PrismaClient } from './generated/prisma/client.js';
-export { ApplicationStatus, SourceKind } from './generated/prisma/enums.js';
-export type * from './generated/prisma/models.js';
+// PrismaClient, the Prisma namespace (errors, input types), enums, and the
+// plain model types such as User and Session.
+export * from './generated/prisma/client.js';
 export type { EnumChecks } from './enum-check.js';

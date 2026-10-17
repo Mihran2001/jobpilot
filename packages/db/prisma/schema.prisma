@@ -47,8 +47,23 @@ model User {
   listingScores ListingScore[]
   applications  Application[]
   cvVersions    CvVersion[]
+  sessions      Session[]
 
   @@map("users")
+}
+
+// A logged-in browser. The cookie holds a random token; only its SHA-256 hash
+// is stored, so a copy of this table cannot be used to log in.
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
 }
 
 model SkillProfile {
@@ -108,6 +123,10 @@ model JobListing {
 
   // The idempotency key for ingestion: fetching a source twice upserts on this.
   @@unique([sourceId, externalId])
+  // The listings feed: ORDER BY posted_at DESC, id DESC with a keyset cursor.
+  // 100k rows: first page 11.2 ms -> 0.07 ms, deep page 8.0 ms -> 0.03 ms
+  // (packages/db/explain/listings-feed.sql).
+  @@index([postedAt(sort: Desc), id(sort: Desc)], map: "job_listings_posted_at_id_idx")
   @@map("job_listings")
 }
 
@@ -153,6 +172,11 @@ model ApplicationEvent {
   createdAt     DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  // Detail view (WHERE application_id = $1 ORDER BY created_at) and the
+  // cascade delete from applications. 200k events: 4.1 ms -> 0.06 ms
+  // (packages/db/explain/application-events.sql).
+  @@index([applicationId, createdAt], map: "application_events_application_id_created_at_idx")
 
   @@map("application_events")
 }
