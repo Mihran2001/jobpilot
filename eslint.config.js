@@ -1,13 +1,21 @@
 import js from '@eslint/js';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import globals from 'globals';
+import nextVitals from 'eslint-config-next/core-web-vitals';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
   globalIgnores(['**/dist/', '**/generated/', '**/node_modules/']),
+  globalIgnores(['**/.next/', '**/next-env.d.ts']),
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
+  // React, hooks, accessibility and Next.js rules, for the web app only.
+  nextVitals.map((config) => ({
+    ...config,
+    files: (config.files ?? ['**/*.{js,jsx,mjs,ts,tsx}']).map((glob) => `apps/web/${glob}`),
+    settings: { ...config.settings, next: { rootDir: 'apps/web/' } },
+  })),
   {
     languageOptions: {
       parserOptions: {

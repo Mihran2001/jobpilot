@@ -30,18 +30,18 @@ It is a single-user app first (me), but the code should have real auth and be wr
 
 ## 3. Tech stack
 
-| Area          | Choice                                                                                                                                                            |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Frontend      | Next.js (App Router), TypeScript. Server Components read shared data (listings) directly from the database; user-scoped data and all mutations go through the API |
-| API           | NestJS (TypeScript): modules, controllers, services, guards, DTO validation, exception filters                                                                    |
-| Worker        | Separate Node process using BullMQ (plain Node or a Nest standalone app, to be proposed in stage 3)                                                               |
-| Database      | PostgreSQL via Prisma 7 (driver adapter `@prisma/adapter-pg`, connection URL in `prisma.config.ts`)                                                               |
-| Queue/cache   | Redis (BullMQ)                                                                                                                                                    |
-| Files         | S3-compatible storage. Local server in Docker Compose, AWS S3 later                                                                                               |
-| Containers    | Docker, Docker Compose for local dev                                                                                                                              |
-| Orchestration | Kubernetes (kind or minikube locally first)                                                                                                                       |
-| Cloud         | AWS, introduced only in stage 6                                                                                                                                   |
-| Shared        | `packages/shared` with Zod schemas and inferred types used by web and api                                                                                         |
+| Area          | Choice                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| Frontend      | Next.js (App Router), TypeScript, Tailwind. Everything goes through the API (see decisions log)     |
+| API           | NestJS (TypeScript): modules, controllers, services, guards, DTO validation, exception filters      |
+| Worker        | Separate Node process using BullMQ (plain Node or a Nest standalone app, to be proposed in stage 3) |
+| Database      | PostgreSQL via Prisma 7 (driver adapter `@prisma/adapter-pg`, connection URL in `prisma.config.ts`) |
+| Queue/cache   | Redis (BullMQ)                                                                                      |
+| Files         | S3-compatible storage. Local server in Docker Compose, AWS S3 later                                 |
+| Containers    | Docker, Docker Compose for local dev                                                                |
+| Orchestration | Kubernetes (kind or minikube locally first)                                                         |
+| Cloud         | AWS, introduced only in stage 6                                                                     |
+| Shared        | `packages/shared` with Zod schemas and inferred types used by web and api                           |
 
 Local environment: macOS, Node 24 LTS (installed with nvm; `.nvmrc` pins 24), Postgres.app installed locally on port 5432. The project database runs in Docker Compose on host port 5434.
 
@@ -215,3 +215,4 @@ pnpm lint             ESLint over the whole repo
 - **No worker_threads:** scoring measured at 0.15 ms per 24 KB listing; event loop p99 2.5 ms under a 5,000-job run (idle 1.9 ms).
 - **Working mode (from stage 4):** stages run back to back without waiting for "next"; tasks collect in `docs/TASKS.md`; each stage is merged into `main` once every check is green. Still stop for decisions (libraries, schema) and always before anything that costs money (stage 6).
 - **Stage 4:** CV PDFs are rendered by running headless Chrome directly as a child process (`CHROME_PATH`); the base CV lives in a `cv_profiles` table as JSON validated by a shared Zod schema; the CSV export reads through a Postgres server-side cursor (`pg-query-stream`).
+- **Stage 5a (web):** Next.js 16.4 with Cache Components and Partial Prefetching, Tailwind 4. Everything, listings included, goes through the API (listings carry per-user scores); this supersedes "Server Components read listings from the database". The web server holds the session cookie on its own domain and forwards it; the browser never calls the API. Board status changes use a status menu with optimistic update, no drag-and-drop library.
