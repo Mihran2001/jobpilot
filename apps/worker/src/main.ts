@@ -27,6 +27,8 @@ const prisma = createPrismaClient({ connectionString: config.DATABASE_URL });
 const storage = createStorage(storageConfigFromEnv(config));
 if (config.S3_CREATE_BUCKET) await storage.ensureBucket();
 const connection = createRedis(config.REDIS_URL);
+// Reconnects happen on their own; log them instead of crashing on an unhandled 'error'.
+connection.on('error', (err) => logger.warn({ err }, 'Redis connection error'));
 const queues = createQueues(connection);
 const adapters = createAdapterRegistry(fetch);
 
