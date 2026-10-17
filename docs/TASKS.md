@@ -63,3 +63,32 @@ export PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH"
       Run `pnpm --filter @jobpilot/api bench:export-memory` with
       `BENCH_APPLICATIONS=30000` and compare the streamed "peak live" figure
       with the README's. Put the cursor back.
+
+## Stage 5a: web UI
+
+- [ ] **Upload your own CV through the UI.** Run `pnpm dev:api`,
+      `pnpm dev:worker` and `pnpm dev:web`, open an application, click "Upload
+      my own PDF" and pick any PDF under 5 MB. Then open the browser's DevTools
+      Network tab and find the three steps: the Server Action that returns the
+      presigned URL, the `PUT` that goes straight to `localhost:9000` (not to
+      the web app or the API), and the action that completes it. Try a
+      renamed `.txt` file as `x.pdf` and see the "not a PDF" error. (I could
+      not click through this one: the in-app browser cannot attach files.)
+- [ ] **Watch Cache Components stream.** Run `pnpm --filter @jobpilot/web build`
+      and read the route table: which routes are `◐` (Partial Prerender) and
+      why are the two route handlers `ƒ`? Then in
+      `apps/web/src/app/(app)/listings/loading.tsx`, change the skeleton count,
+      throttle the network in DevTools, and watch the shell (header) appear
+      before the listings.
+- [ ] **Make stale tabs fail loudly.** Open the same application in two
+      tabs. In tab A change its status to Applied; in tab B, which still shows
+      Saved, change it to Interview. It succeeds: the API reads the current
+      status itself, so the history is correct (Applied -> Interview), but the
+      person in tab B never learned it had changed. Fix it the way HTTP does
+      with `If-Match`: add an optional `expectedStatus` to `changeStatusSchema`
+      in `packages/shared/src/applications.ts`, send the status the menu showed
+      from `apps/web/src/app/(app)/applications/status-select.tsx` (through
+      `changeStatus` in `actions.ts`), and in
+      `apps/api/src/modules/applications/applications.repository.ts` return
+      `conflict` when it differs from the status read in the transaction. Now
+      tab B gets a 409 and its menu snaps back with the message. Add an API test.

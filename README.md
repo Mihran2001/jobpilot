@@ -2,7 +2,7 @@
 
 A personal job-hunt command center: it aggregates remote job listings, scores them against a skill profile, tracks applications through their stages, generates a tailored CV PDF per listing, and exports application history as CSV.
 
-This is a learning and portfolio project built in stages. **Current state: stage 4 (CV generation and files).** The NestJS API serves auth, listings, applications, CVs and a CSV export; a BullMQ worker fetches real listings from Remotive and Jobicy every 6 hours, scores them, and renders tailored CV PDFs with headless Chrome. The web UI comes in stage 5a.
+This is a learning and portfolio project built in stages. **Current state: stage 5a (web UI).** A Next.js dashboard on top of the NestJS API: listings with your match score, an application pipeline board, tailored CV PDFs (headless Chrome in a BullMQ worker) and a CSV export. Jobs come from Remotive and Jobicy every 6 hours. Containers and Kubernetes come in stage 5b.
 
 ## Requirements
 
@@ -20,10 +20,11 @@ pnpm build              # generates the Prisma client, compiles packages
 pnpm db:deploy          # applies migrations
 pnpm db:seed            # sample data; safe to run repeatedly
 pnpm dev:api            # API on http://localhost:3001/api, restarts on change
-pnpm dev:worker         # fetch + score workers; Bull Board on http://127.0.0.1:3002
+pnpm dev:worker         # fetch, score and CV workers; Bull Board on http://127.0.0.1:3002
+pnpm dev:web            # the dashboard on http://localhost:3000
 ```
 
-The seeded user is `dev@jobpilot.test` with the password from `SEED_USER_PASSWORD` in `.env`. Try it:
+Open http://localhost:3000 and sign in as `dev@jobpilot.test` with the password from `SEED_USER_PASSWORD` in `.env`. Or talk to the API directly:
 
 ```bash
 curl -c /tmp/jp.cookies -H 'content-type: application/json' \
@@ -46,6 +47,21 @@ Stop everything with `pnpm infra:down`. Data lives in named Docker volumes and s
 | Postgres | `localhost:5434` | 5432 is left free for a locally installed Postgres                            |
 | Redis    | `localhost:6379` | AOF persistence on, `noeviction` policy (required by BullMQ)                  |
 | MinIO    | `localhost:9000` | S3 API. Web console on `localhost:9001`, login is the S3 key pair from `.env` |
+
+## Web app
+
+`apps/web` is Next.js 16 (App Router) with Tailwind. The browser only ever talks to the web app; the web app's server talks to the API.
+
+```
+browser ──> Next.js server ──> NestJS API ──> Postgres / Redis / storage
+   └──────────── presigned URL ────────────────> storage (CV download/upload only)
+```
+
+- **Session.** The login Server Action calls `POST /api/auth/login`, takes the token from the API's `Set-Cookie`, and sets the same `httpOnly` cookie on the web app's domain. Every Server Component and Server Action calls the API through `src/lib/api.ts`, which forwards that cookie, adds an `x-request-id`, applies a 15 s timeout, and turns a 401 into a redirect to `/login`. `src/proxy.ts` (Next.js 16's name for middleware) only does the optimistic "no cookie at all, go to login" check.
+- **Cache Components.** Pages prerender a static shell (navigation) and stream the per-user content in behind `<Suspense>` (`loading.tsx`), as Next.js 16 requires for anything reading cookies.
+- **Pages.** `/listings` (filters in the URL, cursor pagination, score, attribution link), `/listings/[id]`, `/applications` (board, status menu with optimistic update and rollback on 409), `/applications/[id]` (history, notes, CVs: generate, upload, download), `/cv-profile`.
+- **Route handlers.** `/cv-versions/[id]/download` redirects to a 5-minute storage URL; `/exports/applications.csv` passes the API's stream through without buffering.
+- **Third-party HTML** (listing descriptions) is reduced to text blocks and rendered as text, never injected.
 
 ## API
 
@@ -120,8 +136,8 @@ The UI (stage 5a) must show the source name and link to `job_listings.url` for e
 ```
 apps/
   api/              NestJS REST API: src/modules/<feature>/ (controller -> service -> repository)
-  worker/           BullMQ workers: src/sources (one adapter per site), src/jobs, src/scoring
-                    web arrives in stage 5a
+  worker/           BullMQ workers: src/sources (one adapter per site), src/jobs, src/scoring, src/cv
+  web/              Next.js dashboard: src/app (routes), src/lib (API client, session), src/proxy.ts
 packages/
   shared/           Zod schemas, inferred types and queue contracts; no Node- or database-specific code
   db/               Prisma schema, migrations, seed, and the generated client
@@ -141,6 +157,7 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 | `pnpm test`                       | Integration tests against the test database            |
 | `pnpm dev:api`                    | Run the API with restart on change                     |
 | `pnpm dev:worker`                 | Run the worker with restart on change                  |
+| `pnpm dev:web`                    | Run the web app (needs the API running)                |
 | `pnpm fetch:now [source]`         | Queue an immediate fetch                               |
 | `pnpm lint` / `pnpm format`       | ESLint (type-aware) / Prettier                         |
 | `pnpm db:migrate --name <change>` | Create and apply a migration from schema changes (dev) |
@@ -167,6 +184,7 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 - **Validation with NestJS 12's built-in Standard Schema pipe** and the shared Zod schemas. Responses go through explicit mappers, never raw Prisma rows.
 - **Ownership is part of every query** (`WHERE id = $1 AND user_id = $2`), so another user's data is a 404, indistinguishable from data that does not exist.
 - **Status changes use optimistic concurrency.** The update only applies if the status is still the one just read; otherwise the API answers 409 rather than writing an event with a wrong `fromStatus`.
+- **The web app reads everything through the API**, including listings (each one carries your score, which is per-user data). Ownership checks live in one place, and the web app needs no database credentials. This replaces the brief's original "Server Components read listings from the database".
 - **Files never pass through the API.** Downloads and uploads use 5-minute presigned URLs. An upload URL signs `Content-Type` and `Content-Length`, so storage rejects anything else; after the upload the API checks the object's size and its `%PDF-` signature in storage. URLs are signed for `S3_PUBLIC_ENDPOINT`, the address browsers use, which differs from the internal one in Kubernetes.
 - **Postgres and Redis cannot share a transaction.** When the API cannot queue a CV job within 3 s, it marks the new version `FAILED` and answers 503 instead of leaving it `PENDING` forever. The job id is the version id, so a late duplicate add is harmless.
 - **The CSV export streams.** `pg-query-stream` (a real server-side cursor, 500 rows per fetch) -> `csv-stringify` -> the response, joined by `stream.pipeline`, so backpressure reaches the database and a dropped download frees the connection. Measured with `pnpm --filter @jobpilot/api bench:export-memory`: live heap +1.4 MB for 100k rows and +1.6 MB for 300k, against +61 MB and +184 MB for the load-everything version. Cells starting with `= + - @` are prefixed with `'` so spreadsheets do not run them as formulas.
