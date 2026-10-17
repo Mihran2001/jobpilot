@@ -2,7 +2,7 @@
 
 A personal job-hunt command center: it aggregates remote job listings, scores them against a skill profile, tracks applications through their stages, generates a tailored CV PDF per listing, and exports application history as CSV.
 
-This is a learning and portfolio project built in stages. **Current state: stage 3 (pipeline).** The NestJS API serves auth, listings and applications; a BullMQ worker fetches real listings from Remotive and Jobicy every 6 hours and scores them. The web UI comes in stage 5a.
+This is a learning and portfolio project built in stages. **Current state: stage 4 (CV generation and files).** The NestJS API serves auth, listings, applications, CVs and a CSV export; a BullMQ worker fetches real listings from Remotive and Jobicy every 6 hours, scores them, and renders tailored CV PDFs with headless Chrome. The web UI comes in stage 5a.
 
 ## Requirements
 
@@ -51,21 +51,28 @@ Stop everything with `pnpm infra:down`. Data lives in named Docker volumes and s
 
 All routes are under `/api` and need a session cookie unless marked public.
 
-| Method and path                  | What it does                                                                                                   |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `GET /health` (public)           | 200 if the database answers, 503 otherwise                                                                     |
-| `POST /auth/register` (public)   | Create an account and start a session                                                                          |
-| `POST /auth/login` (public)      | Start a session. Rate-limited per IP                                                                           |
-| `POST /auth/logout`              | End this session                                                                                               |
-| `GET /users/me`                  | The logged-in user                                                                                             |
-| `GET /sources`                   | Listing sources                                                                                                |
-| `GET /listings`                  | Newest first, keyset-paginated. Filters: `q`, `remote`, `minSalary`, `sourceId`, `minScore`; `limit`, `cursor` |
-| `GET /listings/:id`              | One listing with its description and your score                                                                |
-| `POST /applications`             | Save a listing as an application (status `SAVED`)                                                              |
-| `GET /applications`              | Your applications plus a count per status; filter with `status`                                                |
-| `GET /applications/:id`          | One application with its status history                                                                        |
-| `PATCH /applications/:id`        | Edit notes (`null` clears them)                                                                                |
-| `PATCH /applications/:id/status` | Move to a new status; records an event in the same transaction                                                 |
+| Method and path                            | What it does                                                                                                   |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `GET /health` (public)                     | 200 if the database answers, 503 otherwise                                                                     |
+| `POST /auth/register` (public)             | Create an account and start a session                                                                          |
+| `POST /auth/login` (public)                | Start a session. Rate-limited per IP                                                                           |
+| `POST /auth/logout`                        | End this session                                                                                               |
+| `GET /users/me`                            | The logged-in user                                                                                             |
+| `GET /sources`                             | Listing sources                                                                                                |
+| `GET /listings`                            | Newest first, keyset-paginated. Filters: `q`, `remote`, `minSalary`, `sourceId`, `minScore`; `limit`, `cursor` |
+| `GET /listings/:id`                        | One listing with its description and your score                                                                |
+| `POST /applications`                       | Save a listing as an application (status `SAVED`)                                                              |
+| `GET /applications`                        | Your applications plus a count per status; filter with `status`                                                |
+| `GET /applications/:id`                    | One application with its status history                                                                        |
+| `PATCH /applications/:id`                  | Edit notes (`null` clears them)                                                                                |
+| `GET /cv-profile`, `PUT /cv-profile`       | Your base CV (JSON, validated by `cvProfileSchema`)                                                            |
+| `POST /applications/:id/cv`                | Queue a CV tailored to that listing; answers 202 with a `PENDING` version                                      |
+| `GET /cv-versions`, `GET /cv-versions/:id` | Your CVs and their status (`PENDING`, `READY`, `FAILED`)                                                       |
+| `GET /cv-versions/:id/download`            | A 5-minute presigned URL straight to storage                                                                   |
+| `POST /cv-versions/uploads`                | Start an upload: returns a presigned PUT for exactly this type and size                                        |
+| `POST /cv-versions/:id/complete-upload`    | Verify the uploaded object (size, `%PDF-` signature) and mark it `READY`                                       |
+| `GET /exports/applications.csv`            | Your application history, streamed through a database cursor                                                   |
+| `PATCH /applications/:id/status`           | Move to a new status; records an event in the same transaction                                                 |
 
 Request and response shapes are the Zod schemas in `packages/shared`.
 
@@ -83,6 +90,17 @@ Request and response shapes are the Zod schemas in `packages/shared`.
 - **Failed jobs.** Bull Board on http://127.0.0.1:3002 lists failed jobs, their errors and attempts, and can retry them. 4xx responses (except 429) and malformed responses fail immediately instead of using up retries.
 - **Kill-safety.** A job cut off by a crash keeps its lock until it expires (30 s); the next stalled check (every 30 s) moves it back to waiting, so it is re-run within about a minute. Every job is idempotent, so running it twice is harmless.
 - **Graceful shutdown.** `SIGTERM`/`SIGINT` stop new work, let running jobs finish (up to 25 s), then close queues, Redis and Prisma.
+
+### CV generation
+
+`generate-cv` reads the version's application, listing and your CV profile, then:
+
+1. **Tailors** without inventing: skills and experience highlights the listing mentions move to the front (`src/cv/tailor.ts`).
+2. **Renders** an HTML page in which every value is escaped (`src/cv/template.ts`).
+3. **Runs Chrome** as a separate program: `chrome --headless --print-to-pdf=... file:///.../cv.html` (`src/cv/chrome.ts`). Chrome gets its own process group, a 30 s timeout (the whole group is killed on timeout), a throwaway profile directory, and its stderr tail is kept for the logs. Exit code 0 without a valid PDF still counts as a failure.
+4. **Uploads** the PDF to object storage and marks the version `READY`. Only the last failed attempt marks it `FAILED`, with a readable error.
+
+Locally `CHROME_PATH` points at your Google Chrome; in Docker it will be Debian's `chromium` with `CHROME_NO_SANDBOX=true`.
 
 ### Sources and their terms
 
@@ -105,8 +123,9 @@ apps/
   worker/           BullMQ workers: src/sources (one adapter per site), src/jobs, src/scoring
                     web arrives in stage 5a
 packages/
-  shared/           Zod schemas and inferred types; no Node- or database-specific code
+  shared/           Zod schemas, inferred types and queue contracts; no Node- or database-specific code
   db/               Prisma schema, migrations, seed, and the generated client
+  storage/          S3 client: uploads, presigned URLs (used by api and worker)
 infra/docker/       Dockerfiles (stage 5b)
 docker-compose.yml  local Postgres, Redis and MinIO
 ```
@@ -148,6 +167,9 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 - **Validation with NestJS 12's built-in Standard Schema pipe** and the shared Zod schemas. Responses go through explicit mappers, never raw Prisma rows.
 - **Ownership is part of every query** (`WHERE id = $1 AND user_id = $2`), so another user's data is a 404, indistinguishable from data that does not exist.
 - **Status changes use optimistic concurrency.** The update only applies if the status is still the one just read; otherwise the API answers 409 rather than writing an event with a wrong `fromStatus`.
+- **Files never pass through the API.** Downloads and uploads use 5-minute presigned URLs. An upload URL signs `Content-Type` and `Content-Length`, so storage rejects anything else; after the upload the API checks the object's size and its `%PDF-` signature in storage. URLs are signed for `S3_PUBLIC_ENDPOINT`, the address browsers use, which differs from the internal one in Kubernetes.
+- **Postgres and Redis cannot share a transaction.** When the API cannot queue a CV job within 3 s, it marks the new version `FAILED` and answers 503 instead of leaving it `PENDING` forever. The job id is the version id, so a late duplicate add is harmless.
+- **The CSV export streams.** `pg-query-stream` (a real server-side cursor, 500 rows per fetch) -> `csv-stringify` -> the response, joined by `stream.pipeline`, so backpressure reaches the database and a dropped download frees the connection. Measured with `pnpm --filter @jobpilot/api bench:export-memory`: live heap +1.4 MB for 100k rows and +1.6 MB for 300k, against +61 MB and +184 MB for the load-everything version. Cells starting with `= + - @` are prefixed with `'` so spreadsheets do not run them as formulas.
 - **No `worker_threads` for scoring: measured, not needed.** One `scoreListing` call on a 24 KB description takes 0.15 ms (p99 0.26 ms). Running 5,000 real score jobs at concurrency 10 (2,250 jobs/s), event loop delay p99 was 2.5 ms against 1.9 ms idle, max 8.9 ms. A thread pool would add copying and complexity to save almost nothing. Re-run with `pnpm --filter @jobpilot/worker bench:score-lag` if scoring gets heavier.
 - **Fetch jobs re-score the whole batch** instead of detecting what changed. It costs a few hundred cheap jobs per run and makes a re-run after a crash always complete.
 - **Login rate limit is in memory.** Correct for one API process; moves to Redis when there are replicas (stage 5b).
