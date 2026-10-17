@@ -209,3 +209,7 @@ pnpm lint             ESLint over the whole repo
 - **Password hashing:** Argon2id via `@node-rs/argon2` (prebuilt binaries, no install script).
 - **API validation:** NestJS 12's built-in `StandardSchemaValidationPipe` with the Zod schemas from `packages/shared`; no `nestjs-zod`.
 - **API tests:** Vitest + supertest (NestJS 12's default for ESM projects), against a separate `jobpilot_test` database.
+- **Sources (stage 3):** Remotive (whole public feed, at most 4 requests/day) and Jobicy (`industry=engineering`, at most one pass/hour). Both require visible attribution: source name plus a link to the listing URL. RemoteOK rejected (demands a public followed backlink); Himalayas deferred (more rules). Fetch every 6 h; `FETCH_INTERVAL_HOURS` cannot go below 6.
+- **Salaries:** only USD per year is stored; other currencies and hourly/monthly rates become null.
+- **Worker:** plain Node + BullMQ 6 (ioredis connection), no Nest. Failed jobs visible in Bull Board on 127.0.0.1:3002.
+- **No worker_threads:** scoring measured at 0.15 ms per 24 KB listing; event loop p99 2.5 ms under a 5,000-job run (idle 1.9 ms).

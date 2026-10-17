@@ -2,7 +2,7 @@
 
 A personal job-hunt command center: it aggregates remote job listings, scores them against a skill profile, tracks applications through their stages, generates a tailored CV PDF per listing, and exports application history as CSV.
 
-This is a learning and portfolio project built in stages. **Current state: stage 2 (core API).** The NestJS API serves auth, listings and applications; the worker and web UI come in later stages.
+This is a learning and portfolio project built in stages. **Current state: stage 3 (pipeline).** The NestJS API serves auth, listings and applications; a BullMQ worker fetches real listings from Remotive and Jobicy every 6 hours and scores them. The web UI comes in stage 5a.
 
 ## Requirements
 
@@ -20,6 +20,7 @@ pnpm build              # generates the Prisma client, compiles packages
 pnpm db:deploy          # applies migrations
 pnpm db:seed            # sample data; safe to run repeatedly
 pnpm dev:api            # API on http://localhost:3001/api, restarts on change
+pnpm dev:worker         # fetch + score workers; Bull Board on http://127.0.0.1:3002
 ```
 
 The seeded user is `dev@jobpilot.test` with the password from `SEED_USER_PASSWORD` in `.env`. Try it:
@@ -68,16 +69,41 @@ All routes are under `/api` and need a session cookie unless marked public.
 
 Request and response shapes are the Zod schemas in `packages/shared`.
 
+## Worker
+
+`apps/worker` is a plain Node process (no Nest) running two BullMQ queues:
+
+| Queue           | What a job does                                                                                       | Retries                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `fetch-source`  | Fetches one source, upserts every listing on `(source_id, external_id)`, queues scoring for the batch | 5 attempts, 1/2/4/8 min backoff              |
+| `score-listing` | Scores one listing for one user and upserts `listing_scores`                                          | 3 attempts; deduplicated per (user, listing) |
+
+- **Schedule.** On start, the worker creates one BullMQ job scheduler per enabled source (`FETCH_INTERVAL_HOURS`, default 6). Re-creating it on restart keeps the next run time.
+- **Fetch now.** `pnpm fetch:now` or `pnpm fetch:now remotive`. Mind the limits below.
+- **Failed jobs.** Bull Board on http://127.0.0.1:3002 lists failed jobs, their errors and attempts, and can retry them. 4xx responses (except 429) and malformed responses fail immediately instead of using up retries.
+- **Kill-safety.** A job cut off by a crash keeps its lock until it expires (30 s); the next stalled check (every 30 s) moves it back to waiting, so it is re-run within about a minute. Every job is idempotent, so running it twice is harmless.
+- **Graceful shutdown.** `SIGTERM`/`SIGINT` stop new work, let running jobs finish (up to 25 s), then close queues, Redis and Prisma.
+
+### Sources and their terms
+
+| Source   | What we fetch                               | Limits we respect                  | Attribution the terms require                                 |
+| -------- | ------------------------------------------- | ---------------------------------- | ------------------------------------------------------------- |
+| Remotive | The whole public feed (small; delayed 24 h) | At most 4 requests a day           | Name Remotive and link to the job on Remotive                 |
+| Jobicy   | Latest 100 jobs in Software Engineering     | At most one automated pass an hour | Credit Jobicy with a clickable link; apply via the feed's URL |
+
+The UI (stage 5a) must show the source name and link to `job_listings.url` for every listing. Jobs are never passed on to other job sites. Only USD-per-year salaries are stored; anything else is `null`.
+
 ## Tests
 
-`pnpm test` runs the API's integration tests against a separate `jobpilot_test` database (from `TEST_DATABASE_URL`). The test setup creates it if needed and applies migrations with `prisma migrate deploy`; every test starts from empty tables. Only third-party HTTP would ever be mocked.
+`pnpm test` runs the API and worker integration tests, one package at a time, against a separate `jobpilot_test` database (from `TEST_DATABASE_URL`) and Redis database 1 (`TEST_REDIS_URL`). The setup creates the database if needed and applies migrations with `prisma migrate deploy`; every test starts from empty tables. Only third-party HTTP is faked, with small made-up fixtures in the real response shapes.
 
 ## Layout
 
 ```
 apps/
   api/              NestJS REST API: src/modules/<feature>/ (controller -> service -> repository)
-                    web and worker arrive in later stages
+  worker/           BullMQ workers: src/sources (one adapter per site), src/jobs, src/scoring
+                    web arrives in stage 5a
 packages/
   shared/           Zod schemas and inferred types; no Node- or database-specific code
   db/               Prisma schema, migrations, seed, and the generated client
@@ -95,6 +121,8 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 | `pnpm typecheck`                  | Typecheck every package                                |
 | `pnpm test`                       | Integration tests against the test database            |
 | `pnpm dev:api`                    | Run the API with restart on change                     |
+| `pnpm dev:worker`                 | Run the worker with restart on change                  |
+| `pnpm fetch:now [source]`         | Queue an immediate fetch                               |
 | `pnpm lint` / `pnpm format`       | ESLint (type-aware) / Prettier                         |
 | `pnpm db:migrate --name <change>` | Create and apply a migration from schema changes (dev) |
 | `pnpm db:deploy`                  | Apply committed migrations only (CI, production)       |
@@ -120,6 +148,8 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 - **Validation with NestJS 12's built-in Standard Schema pipe** and the shared Zod schemas. Responses go through explicit mappers, never raw Prisma rows.
 - **Ownership is part of every query** (`WHERE id = $1 AND user_id = $2`), so another user's data is a 404, indistinguishable from data that does not exist.
 - **Status changes use optimistic concurrency.** The update only applies if the status is still the one just read; otherwise the API answers 409 rather than writing an event with a wrong `fromStatus`.
+- **No `worker_threads` for scoring: measured, not needed.** One `scoreListing` call on a 24 KB description takes 0.15 ms (p99 0.26 ms). Running 5,000 real score jobs at concurrency 10 (2,250 jobs/s), event loop delay p99 was 2.5 ms against 1.9 ms idle, max 8.9 ms. A thread pool would add copying and complexity to save almost nothing. Re-run with `pnpm --filter @jobpilot/worker bench:score-lag` if scoring gets heavier.
+- **Fetch jobs re-score the whole batch** instead of detecting what changed. It costs a few hundred cheap jobs per run and makes a re-run after a crash always complete.
 - **Login rate limit is in memory.** Correct for one API process; moves to Redis when there are replicas (stage 5b).
 
 The full brief, stage plan and conventions are in [CLAUDE.md](CLAUDE.md).
