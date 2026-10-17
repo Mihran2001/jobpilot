@@ -33,13 +33,4 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}): Promise
   return { app, prisma: app.get(PrismaClient) };
 }
 
-/** Empties every table except Prisma's migration history. */
-export async function resetDatabase(prisma: PrismaClient): Promise<void> {
-  const tables = await prisma.$queryRaw<{ tablename: string }[]>`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
-  if (tables.length === 0) return;
-  // Table names come from the catalog, not from user input.
-  const list = tables.map((t) => `"public"."${t.tablename}"`).join(', ');
-  await prisma.$executeRawUnsafe(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
-}
+export { resetDatabase } from '@jobpilot/db/testing';

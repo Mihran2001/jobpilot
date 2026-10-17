@@ -1,0 +1,36 @@
+{
+  "0-legal-notice": "Synthetic fixture in the shape of Remotive's API response.",
+  "job-count": 3,
+  "jobs": [
+    {
+      "id": 9000001,
+      "url": "https://remotive.com/remote-jobs/software-development/fixture-node-engineer",
+      "title": "Senior Node.js Engineer",
+      "company_name": "Fixture &amp; Co",
+      "category": "Software Development",
+      "job_type": "full_time",
+      "publication_date": "2026-10-14T20:33:44",
+      "candidate_required_location": "Europe",
+      "salary": "$120k - $150k",
+      "description": "<p>We build APIs with <strong>TypeScript</strong>, NestJS and PostgreSQL. Redis and Docker in production.</p>"
+    },
+    {
+      "id": 9000002,
+      "url": "https://remotive.com/remote-jobs/software-development/fixture-designer",
+      "title": "Product Designer",
+      "company_name": "Pixel Fixture",
+      "category": "Design",
+      "publication_date": "2026-10-13T08:00:00",
+      "candidate_required_location": "",
+      "salary": "$50-$75 /hour",
+      "description": "<p>Figma, user research and design systems.</p>"
+    },
+    {
+      "id": 9000003,
+      "url": "https://remotive.com/remote-jobs/software-development/fixture-broken",
+      "company_name": "No Title Inc",
+      "publication_date": "2026-10-12T08:00:00",
+      "description": "<p>This job has no title and must be skipped.</p>"
+    }
+  ]
+}

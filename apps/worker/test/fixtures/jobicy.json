@@ -1,0 +1,46 @@
+{
+  "apiVersion": "2",
+  "friendlyNotice": "Synthetic fixture in the shape of Jobicy's API response.",
+  "jobCount": 3,
+  "jobs": [
+    {
+      "id": 7000001,
+      "url": "https://jobicy.com/jobs/7000001-fixture-full-stack",
+      "jobTitle": "Full Stack Developer (React, Node.js)",
+      "companyName": "Fixture Labs",
+      "jobGeo": "Anywhere",
+      "pubDate": "2026-10-17T14:08:47+00:00",
+      "salaryMin": 110000,
+      "salaryMax": 130000,
+      "salaryCurrency": "USD",
+      "salaryPeriod": "yearly",
+      "jobDescription": "<p>React and Next.js on the front, Node.js and Prisma on the back.</p>"
+    },
+    {
+      "id": 7000002,
+      "url": "https://jobicy.com/jobs/7000002-fixture-uk",
+      "jobTitle": "Backend Engineer",
+      "companyName": "Fixture UK",
+      "jobGeo": "UK",
+      "pubDate": "2026-10-16T09:00:00+00:00",
+      "salaryMin": 70000,
+      "salaryMax": 90000,
+      "salaryCurrency": "GBP",
+      "salaryPeriod": "yearly",
+      "jobDescription": "<p>Go and Kafka.</p>"
+    },
+    {
+      "id": 7000003,
+      "url": "https://jobicy.com/jobs/7000003-fixture-contract",
+      "jobTitle": "Contract QA Engineer",
+      "companyName": "Fixture Contracting",
+      "jobGeo": "USA",
+      "pubDate": "2026-10-15T09:00:00+00:00",
+      "salaryMin": 40,
+      "salaryMax": 60,
+      "salaryCurrency": "USD",
+      "salaryPeriod": "hourly",
+      "jobDescription": "<p>Playwright and Cypress.</p>"
+    }
+  ]
+}

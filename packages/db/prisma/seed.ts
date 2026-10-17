@@ -18,8 +18,27 @@ const prisma = createPrismaClient({ connectionString: env.DATABASE_URL });
 
 const SEED_USER_EMAIL = 'dev@jobpilot.test';
 
+// Real sources, fetched by the worker. Their terms (checked in stage 3) ask
+// for attribution: show the source name and link to the listing's url.
+const realSources = [
+  {
+    name: 'remotive',
+    kind: 'API',
+    // The whole public feed (it is small); scoring ranks what matters.
+    url: 'https://remotive.com/api/remote-jobs',
+    enabled: true,
+  },
+  {
+    name: 'jobicy',
+    kind: 'API',
+    url: 'https://jobicy.com/api/v2/remote-jobs?industry=engineering&count=100',
+    enabled: true,
+  },
+] as const;
+
+// Placeholders that own the hand-written sample listings below. Disabled, so
+// the worker never tries to fetch them.
 const sources = [
-  // Placeholders. Real sources are chosen in stage 3 after checking their terms.
   { name: 'example-api', kind: 'API', url: 'https://jobs.example.com/api/remote', enabled: false },
   { name: 'example-rss', kind: 'RSS', url: 'https://jobs.example.org/remote.rss', enabled: false },
 ] as const;
@@ -204,7 +223,7 @@ async function main() {
   });
 
   const sourceIds = new Map<string, string>();
-  for (const source of sources) {
+  for (const source of [...realSources, ...sources]) {
     const row = await prisma.source.upsert({
       where: { name: source.name },
       update: { kind: source.kind, url: source.url, enabled: source.enabled },

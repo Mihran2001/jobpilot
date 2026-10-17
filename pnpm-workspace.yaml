@@ -8,3 +8,8 @@ onlyBuiltDependencies:
   - '@prisma/engines'
   - esbuild
   - prisma
+
+# Reviewed and deliberately not built: an optional native speed-up for
+# msgpackr (used by BullMQ); without it msgpackr uses plain JavaScript.
+ignoredBuiltDependencies:
+  - msgpackr-extract
