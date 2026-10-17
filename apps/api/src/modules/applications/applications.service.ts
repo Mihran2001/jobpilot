@@ -5,6 +5,7 @@ import {
   type ApplicationsQuery,
   type ChangeStatusInput,
   type CreateApplicationInput,
+  type UpdateApplicationInput,
 } from '@jobpilot/shared';
 import {
   BadRequestException,
@@ -42,6 +43,16 @@ export class ApplicationsService {
 
   async get(userId: string, id: string): Promise<ApplicationDetail> {
     const row = await this.applications.findOneForUser(id, userId);
+    if (!row) throw new NotFoundException('Application not found');
+    return toApplicationDetail(row);
+  }
+
+  async updateNotes(
+    userId: string,
+    id: string,
+    input: UpdateApplicationInput,
+  ): Promise<ApplicationDetail> {
+    const row = await this.applications.updateNotes(id, userId, input.notes);
     if (!row) throw new NotFoundException('Application not found');
     return toApplicationDetail(row);
   }

@@ -3,11 +3,13 @@ import {
   changeStatusSchema,
   createApplicationSchema,
   idParamSchema,
+  updateApplicationSchema,
   type ApplicationDetail,
   type ApplicationList,
   type ApplicationsQuery,
   type ChangeStatusInput,
   type CreateApplicationInput,
+  type UpdateApplicationInput,
 } from '@jobpilot/shared';
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import type { AuthUser } from '../auth/auth.types.js';
@@ -40,6 +42,15 @@ export class ApplicationsController {
     @Param('id', { schema: idParamSchema }) id: string,
   ): Promise<ApplicationDetail> {
     return this.applications.get(user.id, id);
+  }
+
+  @Patch(':id')
+  updateNotes(
+    @CurrentUser() user: AuthUser,
+    @Param('id', { schema: idParamSchema }) id: string,
+    @Body({ schema: updateApplicationSchema }) body: UpdateApplicationInput,
+  ): Promise<ApplicationDetail> {
+    return this.applications.updateNotes(user.id, id, body);
   }
 
   @Patch(':id/status')

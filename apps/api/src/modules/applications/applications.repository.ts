@@ -85,6 +85,23 @@ export class ApplicationsRepository {
   }
 
   /**
+   * Returns null when no application matches: either it does not exist or it
+   * belongs to someone else. The caller cannot tell which, on purpose.
+   */
+  async updateNotes(
+    id: string,
+    userId: string,
+    notes: string | null,
+  ): Promise<ApplicationDetailRow | null> {
+    const { count } = await this.prisma.application.updateMany({
+      where: { id, userId },
+      data: { notes },
+    });
+    if (count === 0) return null;
+    return this.prisma.application.findUniqueOrThrow({ where: { id }, select: detailSelect });
+  }
+
+  /**
    * Changes the status and records the event atomically.
    *
    * The UPDATE only matches if the status is still the one we read

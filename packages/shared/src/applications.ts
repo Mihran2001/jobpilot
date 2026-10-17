@@ -14,6 +14,12 @@ export const changeStatusSchema = z.object({
 });
 export type ChangeStatusInput = z.infer<typeof changeStatusSchema>;
 
+export const updateApplicationSchema = z.object({
+  /** New notes; null clears them. */
+  notes: z.string().trim().max(5000).nullable(),
+});
+export type UpdateApplicationInput = z.infer<typeof updateApplicationSchema>;
+
 export const applicationsQuerySchema = z.object({
   status: applicationStatusSchema.optional(),
 });

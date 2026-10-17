@@ -113,6 +113,52 @@ describe('applications', () => {
     });
   });
 
+  describe('edit notes', () => {
+    const editNotes = (cookie: string, id: string, notes: unknown) =>
+      request(server()).patch(`/api/applications/${id}`).set('Cookie', cookie).send({ notes });
+
+    it('replaces the notes, and null clears them', async () => {
+      const { id } = applicationDetailSchema.parse((await create(ada).expect(201)).body);
+
+      const updated = applicationDetailSchema.parse(
+        (await editNotes(ada, id, '  Ask about the team size  ').expect(200)).body,
+      );
+      expect(updated.notes).toBe('Ask about the team size'); // trimmed by the schema
+
+      const cleared = applicationDetailSchema.parse(
+        (await editNotes(ada, id, null).expect(200)).body,
+      );
+      expect(cleared.notes).toBeNull();
+    });
+
+    it('does not touch the status history', async () => {
+      const { id } = applicationDetailSchema.parse((await create(ada).expect(201)).body);
+      await editNotes(ada, id, 'Some notes').expect(200);
+      expect(await t.prisma.applicationEvent.count({ where: { applicationId: id } })).toBe(1);
+    });
+
+    it("answers 404 when user B edits user A's notes, and changes nothing", async () => {
+      const { id } = applicationDetailSchema.parse((await create(ada).expect(201)).body);
+      await editNotes(ada, id, 'Ada wrote this').expect(200);
+
+      const res = await editNotes(bob, id, 'Bob was here').expect(404);
+      expect(res.body.message).toBe('Application not found');
+
+      const row = await t.prisma.application.findUniqueOrThrow({ where: { id } });
+      expect(row.notes).toBe('Ada wrote this');
+    });
+
+    it('rejects a missing or too long notes field with 400', async () => {
+      const { id } = applicationDetailSchema.parse((await create(ada).expect(201)).body);
+      await request(server())
+        .patch(`/api/applications/${id}`)
+        .set('Cookie', ada)
+        .send({})
+        .expect(400);
+      await editNotes(ada, id, 'x'.repeat(5001)).expect(400);
+    });
+  });
+
   describe('list', () => {
     it('returns only my applications, filtered by status, with counts for every status', async () => {
       const catalog = await t.prisma.source.findFirstOrThrow();
