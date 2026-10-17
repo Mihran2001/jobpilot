@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-// These lists must match the enums in packages/db/prisma/schema.prisma.
+// These lists must match the enums in packages/db/prisma/schema.prisma
+// (cv_status and cv_source live in cv.ts and are checked the same way).
 // packages/db/src/enum-check.ts fails the build if they drift apart.
 
 export const applicationStatusSchema = z.enum([
