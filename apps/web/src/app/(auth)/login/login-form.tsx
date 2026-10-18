@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 import { buttonClass, ErrorText, inputClass } from '@/components/ui';
 import { login, type LoginState } from './actions';
@@ -34,6 +35,12 @@ export function LoginForm({ next }: { next: string }) {
       <button type="submit" disabled={pending} className={`${buttonClass()} w-full`}>
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
+      <p className="text-center text-sm text-slate-500">
+        New here?{' '}
+        <Link href="/register" className="text-brand-600 hover:underline">
+          Create an account
+        </Link>
+      </p>
     </form>
   );
 }

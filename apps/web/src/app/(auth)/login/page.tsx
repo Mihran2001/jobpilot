@@ -7,8 +7,17 @@ async function LoginWithNext({
 }: {
   searchParams: PageProps<'/login'>['searchParams'];
 }) {
-  const { next } = await searchParams;
-  return <LoginForm next={typeof next === 'string' ? next : '/listings'} />;
+  const { next, deleted } = await searchParams;
+  return (
+    <>
+      {deleted === '1' && (
+        <p className="mb-4 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          Your account and all its data have been deleted.
+        </p>
+      )}
+      <LoginForm next={typeof next === 'string' ? next : '/listings'} />
+    </>
+  );
 }
 
 export default function LoginPage({ searchParams }: PageProps<'/login'>) {

@@ -1,16 +1,9 @@
-import { listingsPageSchema, type ListingSummary } from '@jobpilot/shared';
+import { listingsPageSchema } from '@jobpilot/shared';
 import Link from 'next/link';
-import {
-  buttonClass,
-  Card,
-  formatDate,
-  formatSalary,
-  inputClass,
-  PageHeader,
-  ScoreBadge,
-  SourceLink,
-} from '@/components/ui';
+import { buttonClass, inputClass, PageHeader } from '@/components/ui';
+import { ListingRow } from '@/components/listing-row';
 import { api } from '@/lib/api';
+import { SaveSearchForm } from './save-search-form';
 import { SaveButton } from './save-button';
 
 const FILTERS = ['q', 'remote', 'minSalary', 'minScore', 'cursor'] as const;
@@ -23,31 +16,6 @@ function toQuery(params: Record<string, string | string[] | undefined>): URLSear
     if (typeof value === 'string' && value !== '') query.set(key, value);
   }
   return query;
-}
-
-function ListingRow({ listing }: { listing: ListingSummary }) {
-  const salary = formatSalary(listing.salaryMin, listing.salaryMax);
-  return (
-    <Card className="flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-center gap-2">
-          <ScoreBadge score={listing.score} />
-          <Link href={`/listings/${listing.id}`} className="truncate font-medium hover:underline">
-            {listing.title}
-          </Link>
-        </div>
-        <p className="text-sm text-slate-600">
-          {listing.company.name} · {listing.location}
-          {salary && <> · {salary}</>}
-        </p>
-        <p className="flex gap-3 text-xs text-slate-500">
-          <span>Posted {formatDate(listing.postedAt)}</span>
-          <SourceLink source={listing.source.name} url={listing.url} />
-        </p>
-      </div>
-      <SaveButton jobListingId={listing.id} />
-    </Card>
-  );
 }
 
 export default async function ListingsPage({ searchParams }: PageProps<'/listings'>) {
@@ -106,12 +74,25 @@ export default async function ListingsPage({ searchParams }: PageProps<'/listing
         </div>
       </form>
 
+      {(['q', 'remote', 'minSalary', 'minScore'] as const).some((k) => query.has(k)) && (
+        <SaveSearchForm
+          filters={{
+            q: query.get('q') ?? undefined,
+            remote: query.has('remote') ? query.get('remote') === 'true' : undefined,
+            minSalary: query.has('minSalary') ? Number(query.get('minSalary')) : undefined,
+            minScore: query.has('minScore') ? Number(query.get('minScore')) : undefined,
+          }}
+        />
+      )}
+
       {page.items.length === 0 ? (
         <p className="text-slate-500">No listings match these filters.</p>
       ) : (
         <div className="space-y-3">
           {page.items.map((listing) => (
-            <ListingRow key={listing.id} listing={listing} />
+            <ListingRow key={listing.id} listing={listing}>
+              <SaveButton jobListingId={listing.id} />
+            </ListingRow>
           ))}
         </div>
       )}

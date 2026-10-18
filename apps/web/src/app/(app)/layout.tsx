@@ -1,4 +1,4 @@
-import { userResponseSchema } from '@jobpilot/shared';
+import { alertsSummarySchema, userResponseSchema } from '@jobpilot/shared';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { logout } from '../actions';
@@ -8,7 +8,22 @@ const NAV = [
   { href: '/listings', label: 'Listings' },
   { href: '/applications', label: 'Applications' },
   { href: '/cv-profile', label: 'CV profile' },
+  { href: '/settings', label: 'Settings' },
 ] as const;
+
+/** The unseen-alerts count next to "Alerts"; streams in like the user's email. */
+async function AlertsBadge() {
+  const { unseen } = await api('/alerts/summary', alertsSummarySchema);
+  if (unseen === 0) return null;
+  return (
+    <span
+      className="ml-1 rounded-full bg-brand-600 px-1.5 text-xs font-semibold text-white"
+      aria-label={`${unseen} new`}
+    >
+      {unseen}
+    </span>
+  );
+}
 
 async function CurrentUser() {
   const user = await api('/users/me', userResponseSchema);
@@ -34,6 +49,12 @@ export default function AppLayout({ children }: LayoutProps<'/'>) {
                 {item.label}
               </Link>
             ))}
+            <Link href="/alerts" className="text-slate-600 hover:text-slate-900">
+              Alerts
+              <Suspense fallback={null}>
+                <AlertsBadge />
+              </Suspense>
+            </Link>
             <a href="/exports/applications.csv" className="text-slate-600 hover:text-slate-900">
               Export CSV
             </a>
