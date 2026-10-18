@@ -1,0 +1,16 @@
+# What is the same in every environment. An overlay (overlays/local, later
+# overlays/aws) adds the config, the secrets, image tags and how traffic
+# reaches the Gateway.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - migrate-job.yaml
+  - api.yaml
+  - worker.yaml
+  - web.yaml
+  - fetch-cronjob.yaml
+  - gateway.yaml
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: jobpilot

@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      # The worker gives running jobs up to 25 s to finish on SIGTERM.
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: jobpilot/worker
+          ports:
+            - name: health
+              containerPort: 3003
+          envFrom:
+            - configMapRef:
+                name: jobpilot-config
+            - secretRef:
+                name: jobpilot-secrets
+          env:
+            # Chrome writes its profile and crash files under HOME; with a
+            # read-only root filesystem that has to be the writable /tmp.
+            - name: HOME
+              value: /tmp
+          readinessProbe:
+            httpGet: { path: /ready, port: health }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /live, port: health }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            # Room for one Chrome rendering a CV next to the Node process.
+            limits: { memory: 1Gi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi

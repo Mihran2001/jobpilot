@@ -1,0 +1,37 @@
+# Applies pending migrations once, before the Deployments roll
+# (infra/k8s/up.sh waits for it). Jobs are immutable, so up.sh deletes the
+# previous run first. `prisma migrate deploy` takes an advisory lock, so even
+# two runs at once could not apply a migration twice.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 300
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: migrate
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: jobpilot/migrate
+          envFrom:
+            - secretRef:
+                name: jobpilot-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
