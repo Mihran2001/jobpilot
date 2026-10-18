@@ -3,6 +3,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_CONFIG, type AppConfig } from '../../config/config.js';
 import { UsersModule } from '../users/users.module.js';
+import { AccountController } from './account.controller.js';
+import { AccountService } from './account.service.js';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { PasswordHasher } from './password-hasher.js';
@@ -21,9 +23,10 @@ import { SessionsRepository } from './sessions.repository.js';
       ],
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AccountController],
   providers: [
     AuthService,
+    AccountService,
     PasswordHasher,
     SessionsRepository,
     { provide: APP_GUARD, useClass: SessionGuard },

@@ -11,7 +11,7 @@ export interface ListingFilters {
 }
 
 /** Columns for list rows. The description is left out: it is the bulk of each row. */
-const summarySelect = (userId: string) =>
+export const summarySelect = (userId: string) =>
   ({
     id: true,
     title: true,

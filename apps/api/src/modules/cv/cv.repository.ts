@@ -34,6 +34,13 @@ export class CvRepository {
     return this.prisma.cvVersion.findFirst({ where: { id, userId } });
   }
 
+  /** Generated (not uploaded) CVs since a point in time, for the daily quota. */
+  countGeneratedSince(userId: string, since: Date): Promise<number> {
+    return this.prisma.cvVersion.count({
+      where: { userId, source: 'GENERATED', createdAt: { gte: since } },
+    });
+  }
+
   listVersions(userId: string, applicationId?: string): Promise<CvVersion[]> {
     return this.prisma.cvVersion.findMany({
       where: { userId, applicationId },
