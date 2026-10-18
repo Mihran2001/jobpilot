@@ -1,0 +1,37 @@
+# Fills a new database once: your user (password from SSM Parameter Store),
+# the real job sources and an example CV profile. Created suspended, so it
+# only runs when the deploy script is called with --seed.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed
+spec:
+  suspend: true
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: seed
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: seed
+          image: jobpilot/migrate
+          command: ['/usr/bin/tini', '--', 'pnpm', 'exec', 'prisma', 'db', 'seed']
+          envFrom:
+            - secretRef:
+                name: jobpilot-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
