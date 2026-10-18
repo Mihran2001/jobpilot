@@ -203,8 +203,8 @@ describe('multi-user: profiles, saved searches, alerts, quotas, deletion', () =>
             .set('Cookie', cookie)
             .send({ password: 'guess-guess-1' });
         // The limit is counted per route, like login and register.
-        await attempt().expect(401);
-        await attempt().expect(401);
+        await attempt().expect(403);
+        await attempt().expect(403);
         await attempt().expect(429);
       } finally {
         await strict.app.close();
@@ -212,7 +212,7 @@ describe('multi-user: profiles, saved searches, alerts, quotas, deletion', () =>
     });
 
     it('needs the password', async () => {
-      await as(ada).delete('/api/users/me', { password: 'wrong password!!' }).expect(401);
+      await as(ada).delete('/api/users/me', { password: 'wrong password!!' }).expect(403);
       expect(await t.prisma.user.count({ where: { id: adaId } })).toBe(1);
     });
 

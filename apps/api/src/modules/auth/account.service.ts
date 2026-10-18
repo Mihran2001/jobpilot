@@ -1,6 +1,6 @@
 import { PrismaClient } from '@jobpilot/db';
 import type { Storage } from '@jobpilot/storage';
-import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, Logger, ForbiddenException } from '@nestjs/common';
 import { STORAGE } from '../../infra/storage/storage.module.js';
 import { PasswordHasher } from './password-hasher.js';
 
@@ -26,7 +26,8 @@ export class AccountService {
   async delete(userId: string, password: string): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (!(await this.hasher.verify(user.passwordHash, password))) {
-      throw new UnauthorizedException('Wrong password');
+      // 403, not 401: the session is valid; 401 would mean "sign in again".
+      throw new ForbiddenException('Wrong password');
     }
     const files = await this.storage.deletePrefix(`users/${userId}/`);
     await this.prisma.user.delete({ where: { id: userId } });
