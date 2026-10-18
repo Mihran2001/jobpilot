@@ -92,3 +92,33 @@ export PATH="$HOME/.nvm/versions/node/v24.21.0/bin:$PATH"
       `apps/api/src/modules/applications/applications.repository.ts` return
       `conflict` when it differs from the status read in the transaction. Now
       tab B gets a 409 and its menu snaps back with the message. Add an API test.
+
+## Stage 5b: containers and Kubernetes
+
+Start the cluster first: `pnpm infra:up && pnpm k8s:up`.
+
+- [ ] **See requests drop, then explain why.** Run
+      `infra/k8s/rollout-test.sh api`: every request answers 200. Now remove
+      the `lifecycle.preStop` block from `infra/k8s/base/api.yaml`, set
+      `maxUnavailable: 1` and `maxSurge: 0`, run `pnpm k8s:up`, and run the
+      test again (my run lost 3 of 1,646). Explain in two sentences what
+      happened to those requests, using the words "endpoints" and "SIGTERM".
+      Put the file back (`git checkout infra/k8s/base/api.yaml`, `pnpm k8s:up`).
+- [ ] **Get the Prisma CLI out of the API image.** `docker images | grep jobpilot/api`
+      shows about 900 MB. Look inside:
+      `docker run --rm --entrypoint sh jobpilot/api:<tag> -c 'du -sh /app/node_modules/.pnpm/* | sort -rh | head'`.
+      The Prisma CLI, Prisma Studio, TypeScript and React are there, but the API
+      only needs `@prisma/client`. The cause: `@prisma/client` has an optional
+      peer dependency on `prisma`, `packages/db` has `prisma` as a dev
+      dependency, so pnpm resolves the peer and records it as part of
+      `@prisma/client`'s identity in `pnpm-lock.yaml` (search for
+      `'@prisma/client@7.10.0(prisma@`). `--prod` then installs it anyway.
+      Find a fix (ideas: pnpm's `peerDependencyRules`, moving the CLI, or
+      `pnpm deploy`), rebuild, and compare sizes. Make sure `pnpm build` and
+      the migration Job still work.
+- [ ] **Crash the worker mid-CV.** Open an application at http://localhost:8080,
+      click "Generate tailored CV", and immediately run
+      `kubectl delete pod -n jobpilot -l app=worker --grace-period=0 --force`.
+      Watch `kubectl get pods -n jobpilot -w`: the Deployment starts a new pod.
+      Does the CV still become READY? How long did it take, and which BullMQ
+      setting from stage 3 explains it?
