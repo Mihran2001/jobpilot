@@ -1,0 +1,15 @@
+# The local kind cluster. Deploy with: pnpm k8s:up
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jobpilot
+resources:
+  - ../../base
+  - envoy-proxy.yaml
+# Generated with a content hash in the name: changing a value creates a new
+# ConfigMap/Secret, which changes the pods' spec and rolls them automatically.
+configMapGenerator:
+  - name: jobpilot-config
+    envs: [config.env]
+secretGenerator:
+  - name: jobpilot-secrets
+    envs: [secrets.env]

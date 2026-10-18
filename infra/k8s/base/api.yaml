@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: api
+  # A rollout never goes below 2 ready pods: start one new pod, wait until it
+  # is ready, then stop one old pod.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: jobpilot/api
+          ports:
+            - name: http
+              containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: jobpilot-config
+            - secretRef:
+                name: jobpilot-secrets
+          # Ready = may receive traffic (needs the database).
+          readinessProbe:
+            httpGet: { path: /api/health/ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          # Live = the process works at all. Never depends on the database,
+          # or a database outage would restart every pod in a loop.
+          livenessProbe:
+            httpGet: { path: /api/health/live, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            # Endpoint removal reaches Envoy and kube-proxy asynchronously.
+            # Keep serving for 5 s after termination starts, so nothing is
+            # still routed here when the process begins shutting down.
+            preStop:
+              sleep:
+                seconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+spec:
+  selector:
+    app: api
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http

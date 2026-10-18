@@ -140,3 +140,29 @@ describe('login rate limit', () => {
     await attempt().expect(429);
   });
 });
+
+describe('login rate limit behind a proxy', () => {
+  let t: TestApp;
+
+  beforeAll(async () => {
+    // Supertest connects over loopback, which "loopback" trusts as a proxy hop.
+    t = await createTestApp({ AUTH_RATE_LIMIT_PER_MINUTE: 2, TRUST_PROXY: 'loopback' });
+    await resetDatabase(t.prisma);
+  });
+  afterAll(async () => {
+    await t.app.close();
+  });
+
+  const attemptFrom = (clientIp: string) =>
+    request(t.app.getHttpServer())
+      .post('/api/auth/login')
+      .set('x-forwarded-for', clientIp)
+      .send({ email: 'ada@example.com', password: 'guessing-passwords' });
+
+  it('counts attempts per client address, not per proxy', async () => {
+    await attemptFrom('203.0.113.7').expect(401);
+    await attemptFrom('203.0.113.7').expect(401);
+    await attemptFrom('203.0.113.7').expect(429); // this client is out of attempts...
+    await attemptFrom('198.51.100.4').expect(401); // ...another client is not
+  });
+});

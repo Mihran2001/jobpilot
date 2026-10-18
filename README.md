@@ -2,7 +2,7 @@
 
 A personal job-hunt command center: it aggregates remote job listings, scores them against a skill profile, tracks applications through their stages, generates a tailored CV PDF per listing, and exports application history as CSV.
 
-This is a learning and portfolio project built in stages. **Current state: stage 5a (web UI).** A Next.js dashboard on top of the NestJS API: listings with your match score, an application pipeline board, tailored CV PDFs (headless Chrome in a BullMQ worker) and a CSV export. Jobs come from Remotive and Jobicy every 6 hours. Containers and Kubernetes come in stage 5b.
+This is a learning and portfolio project built in stages. **Current state: stage 5b (containers and Kubernetes).** A Next.js dashboard on top of a NestJS API and a BullMQ worker, running locally with `pnpm dev:*` or in a local Kubernetes cluster (kind) with `pnpm k8s:up`. Jobs come from Remotive and Jobicy; tailored CV PDFs are rendered by headless Chrome. AWS comes in stage 6.
 
 ## Requirements
 
@@ -47,6 +47,38 @@ Stop everything with `pnpm infra:down`. Data lives in named Docker volumes and s
 | Postgres | `localhost:5434` | 5432 is left free for a locally installed Postgres                            |
 | Redis    | `localhost:6379` | AOF persistence on, `noeviction` policy (required by BullMQ)                  |
 | MinIO    | `localhost:9000` | S3 API. Web console on `localhost:9001`, login is the S3 key pair from `.env` |
+
+## Run it in Kubernetes
+
+Needs Docker, [kind](https://kind.sigs.k8s.io/) (`brew install kind`) and kubectl. Postgres, Redis and MinIO keep running in Docker Compose (`pnpm infra:up`); the pods reach them through `host.docker.internal`.
+
+```bash
+pnpm k8s:up             # cluster + Envoy Gateway if missing, build and load images, migrate, roll out
+```
+
+Then open http://localhost:8080. `pnpm k8s:down` deletes the whole cluster.
+
+| Piece                                | What it is                                                                                                                                                            |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/k8s/kind.yaml`                | One-node cluster, Kubernetes 1.35.8 (pinned: within one minor version of Docker Desktop's kubectl 1.34). Port 30080 in the cluster is `127.0.0.1:8080` on the Mac.    |
+| `infra/docker/*.Dockerfile`          | Multi-stage images for api, worker (with Chromium), web (Next.js standalone) and migrate. Frozen-lockfile installs, non-root `node` user, `tini` as PID 1.            |
+| `infra/k8s/base`                     | Deployments (api ×2, web ×2, worker ×1), Services, the migration Job, the fetch CronJob, and the Gateway API resources.                                               |
+| `infra/k8s/overlays/local`           | Config (`config.env`), secrets (`secrets.env`, gitignored, generated from the example), and the NodePort for the gateway.                                             |
+| `infra/k8s/up.sh`                    | Builds images tagged with the commit (`-dirty-<time>` if uncommitted), loads them into kind, runs the migration Job and waits for it, then rolls out the Deployments. |
+| `infra/k8s/rollout-test.sh api\|web` | Sends ~50 requests/s from inside the cluster during a rolling restart and counts the answers.                                                                         |
+
+**Traffic:** browser → Envoy Gateway (Gateway API; `ingress-nginx` was retired in March 2026) → `web` Service → web pods → `api` Service → api pods. The API has no route from outside.
+
+**Zero-downtime rollouts**, measured with `rollout-test.sh`: 1,645 of 1,645 requests answered during an API rollout and 1,643 of 1,643 through the gateway during a web rollout. With `preStop` removed and `maxUnavailable: 1`, the same test lost 3 requests. What makes the difference:
+
+- `maxUnavailable: 0, maxSurge: 1`: a new pod must be ready before an old one goes.
+- Readiness probes (`/api/health/ready`, `/healthz`): traffic only to pods that can serve it.
+- `preStop: sleep 5s`: endpoint removal reaches Envoy and kube-proxy asynchronously, so a terminating pod keeps serving for 5 s before it gets `SIGTERM`; then the app's own graceful shutdown finishes in-flight requests.
+- Liveness probes never check the database, so a database outage does not restart healthy pods.
+
+**Scheduled fetching** is the `fetch-sources` CronJob (every 6 h, UTC): it runs `fetch:now`, which enqueues one job per enabled source; the worker fetches with retries. It is the only scheduler. On start the worker removes any BullMQ fetch schedulers from earlier versions, and the jobs they had already queued, before it starts processing. To fetch now: `kubectl create job --from=cronjob/fetch-sources fetch-now -n jobpilot`.
+
+**Hardening:** every container runs as uid 1000 with a read-only root filesystem, no privilege escalation and all capabilities dropped; only `/tmp` (and Next.js's cache) are writable `emptyDir` volumes.
 
 ## Web app
 
@@ -101,7 +133,7 @@ Request and response shapes are the Zod schemas in `packages/shared`.
 | `fetch-source`  | Fetches one source, upserts every listing on `(source_id, external_id)`, queues scoring for the batch | 5 attempts, 1/2/4/8 min backoff              |
 | `score-listing` | Scores one listing for one user and upserts `listing_scores`                                          | 3 attempts; deduplicated per (user, listing) |
 
-- **Schedule.** On start, the worker creates one BullMQ job scheduler per enabled source (`FETCH_INTERVAL_HOURS`, default 6). Re-creating it on restart keeps the next run time.
+- **Schedule.** In Kubernetes, the `fetch-sources` CronJob enqueues fetches every 6 hours (see below). Locally, run `pnpm fetch:now` when you want fresh listings.
 - **Fetch now.** `pnpm fetch:now` or `pnpm fetch:now remotive`. Mind the limits below.
 - **Failed jobs.** Bull Board on http://127.0.0.1:3002 lists failed jobs, their errors and attempts, and can retry them. 4xx responses (except 429) and malformed responses fail immediately instead of using up retries.
 - **Kill-safety.** A job cut off by a crash keeps its lock until it expires (30 s); the next stalled check (every 30 s) moves it back to waiting, so it is re-run within about a minute. Every job is idempotent, so running it twice is harmless.
@@ -142,7 +174,8 @@ packages/
   shared/           Zod schemas, inferred types and queue contracts; no Node- or database-specific code
   db/               Prisma schema, migrations, seed, and the generated client
   storage/          S3 client: uploads, presigned URLs (used by api and worker)
-infra/docker/       Dockerfiles (stage 5b)
+infra/docker/       Dockerfiles for api, worker, web, migrate
+infra/k8s/          kind config, Kustomize base and local overlay, deploy and rollout-test scripts
 docker-compose.yml  local Postgres, Redis and MinIO
 ```
 
@@ -159,6 +192,7 @@ Dependencies point one way: `apps → db → shared`. `shared` must stay importa
 | `pnpm dev:worker`                 | Run the worker with restart on change                  |
 | `pnpm dev:web`                    | Run the web app (needs the API running)                |
 | `pnpm fetch:now [source]`         | Queue an immediate fetch                               |
+| `pnpm k8s:up` / `pnpm k8s:down`   | Deploy to / delete the local kind cluster              |
 | `pnpm lint` / `pnpm format`       | ESLint (type-aware) / Prettier                         |
 | `pnpm db:migrate --name <change>` | Create and apply a migration from schema changes (dev) |
 | `pnpm db:deploy`                  | Apply committed migrations only (CI, production)       |

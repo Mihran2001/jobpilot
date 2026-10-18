@@ -8,13 +8,14 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "build:packages": "pnpm -r --filter './packages/*' build",
+    "typecheck": "pnpm build:packages && pnpm -r typecheck",
     "test": "pnpm -r --workspace-concurrency=1 test",
     "dev:api": "pnpm --filter @jobpilot/api dev",
     "dev:worker": "pnpm --filter @jobpilot/worker dev",
     "dev:web": "pnpm --filter @jobpilot/web dev",
     "fetch:now": "pnpm --filter @jobpilot/worker fetch:now",
-    "lint": "pnpm --filter @jobpilot/web typegen && eslint .",
+    "lint": "pnpm build:packages && pnpm --filter @jobpilot/web typegen && eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "infra:up": "docker compose up -d --wait",
@@ -22,7 +23,9 @@
     "db:generate": "pnpm --filter @jobpilot/db generate",
     "db:migrate": "pnpm --filter @jobpilot/db migrate:dev",
     "db:deploy": "pnpm --filter @jobpilot/db migrate:deploy",
-    "db:seed": "pnpm --filter @jobpilot/db seed"
+    "db:seed": "pnpm --filter @jobpilot/db seed",
+    "k8s:up": "infra/k8s/up.sh",
+    "k8s:down": "kind delete cluster --name jobpilot"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -24,6 +24,8 @@ export function loggerParams(config: AppConfig): Params {
     pinoHttp: {
       level: config.LOG_LEVEL,
       genReqId: requestId,
+      // Kubernetes probes every few seconds; logging them would drown everything else.
+      autoLogging: { ignore: (req) => req.url?.startsWith('/api/health/') ?? false },
       redact: {
         paths: ['req.headers.cookie', 'req.headers.authorization', 'res.headers["set-cookie"]'],
         censor: '[redacted]',

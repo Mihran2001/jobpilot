@@ -93,6 +93,8 @@ export async function htmlToPdf(html: string, options: ChromeOptions): Promise<B
       '--no-default-browser-check',
       '--disable-extensions',
       '--mute-audio',
+      // Containers give /dev/shm only 64 MB by default; use /tmp instead.
+      '--disable-dev-shm-usage',
       // A throwaway profile, so parallel jobs never share Chrome state.
       `--user-data-dir=${path.join(dir, 'profile')}`,
       '--no-pdf-header-footer',

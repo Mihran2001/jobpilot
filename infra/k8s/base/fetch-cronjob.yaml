@@ -1,0 +1,50 @@
+# The only thing that schedules fetches (BullMQ schedulers were removed).
+# It just enqueues one fetch-source job per enabled source; the worker does
+# the fetching, with its retries and backoff.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: fetch-sources
+spec:
+  # Every 6 hours: Remotive allows about 4 requests a day.
+  schedule: '0 */6 * * *'
+  timeZone: Etc/UTC
+  # If a run is somehow still going, skip the next one instead of stacking.
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: fetch-sources
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: fetch-now
+              image: jobpilot/worker
+              command: ['/usr/bin/tini', '--', 'node', 'dist/cli/fetch-now.js']
+              envFrom:
+                - configMapRef:
+                    name: jobpilot-config
+                - secretRef:
+                    name: jobpilot-secrets
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { memory: 256Mi }
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]

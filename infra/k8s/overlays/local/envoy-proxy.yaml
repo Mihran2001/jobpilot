@@ -1,0 +1,19 @@
+# Locally the gateway's Service is a NodePort on 30080, which kind maps to
+# http://localhost:8080 (infra/k8s/kind.yaml).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: jobpilot-proxy
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: NodePort
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              ports:
+                - port: 80
+                  nodePort: 30080

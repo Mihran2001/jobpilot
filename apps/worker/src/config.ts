@@ -10,9 +10,9 @@ const envSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
-    // Remotive asks for at most 4 requests a day, so 6 hours is the floor.
-    FETCH_INTERVAL_HOURS: z.coerce.number().int().min(6).max(168).default(6),
     SCORE_CONCURRENCY: z.coerce.number().int().min(1).max(50).default(10),
+    // HTTP port for Kubernetes probes (/live, /ready). 0 turns it off.
+    WORKER_HEALTH_PORT: z.coerce.number().int().min(0).max(65_535).default(0),
     // Bull Board, bound to 127.0.0.1 only. 0 turns it off.
     BULL_BOARD_PORT: z.coerce.number().int().min(0).max(65_535).default(3002),
     // Headless Chrome for CV PDFs: your Chrome locally, chromium in Docker.

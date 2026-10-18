@@ -1,42 +1,34 @@
-import type { PrismaClient } from '@jobpilot/db';
 import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { FETCH_JOB_OPTIONS, type FetchSourceData } from './queues.js';
+import type { FetchSourceData } from './queues.js';
 
 /**
- * Makes the BullMQ schedulers match the sources table: one per enabled
- * source that has an adapter, none for anything else.
+ * Scheduled fetching is triggered by a Kubernetes CronJob running
+ * `fetch:now` (infra/k8s/base/fetch-cronjob.yaml), and only by that: two
+ * schedulers would fetch twice. BullMQ job schedulers from stage 3 may still
+ * exist in Redis, so the worker removes them on start, BEFORE any worker
+ * runs.
  *
- * Safe to run on every start: upserting an existing scheduler keeps its
- * next run time, so a restart does not trigger an extra fetch.
+ * Removing a scheduler does not remove the job it has already queued for its
+ * next run (checked against BullMQ 6.3), so that job is removed too.
+ * Otherwise a job due while no worker was running would still fire once.
  */
-export async function syncFetchSchedulers(args: {
-  prisma: PrismaClient;
-  queue: Queue<FetchSourceData>;
-  adapterNames: ReadonlySet<string>;
-  everyMs: number;
-  logger: Logger;
-}): Promise<void> {
-  const { prisma, queue, adapterNames, everyMs, logger } = args;
-  const sources = await prisma.source.findMany({ orderBy: { name: 'asc' } });
+export async function removeFetchSchedulers(
+  queue: Queue<FetchSourceData>,
+  logger: Logger,
+): Promise<void> {
+  const schedulers = await queue.getJobSchedulers();
+  if (schedulers.length === 0) return;
 
-  const wanted = new Set<string>();
-  for (const source of sources) {
-    if (!source.enabled || !adapterNames.has(source.name)) continue;
-    const schedulerId = `fetch-${source.name}`;
-    wanted.add(schedulerId);
-    await queue.upsertJobScheduler(
-      schedulerId,
-      { every: everyMs },
-      { name: 'fetch', data: { sourceId: source.id }, opts: FETCH_JOB_OPTIONS },
-    );
-  }
+  const keys = new Set(schedulers.map((s) => s.key));
+  for (const key of keys) await queue.removeJobScheduler(key);
 
-  for (const scheduler of await queue.getJobSchedulers()) {
-    if (!wanted.has(scheduler.key)) await queue.removeJobScheduler(scheduler.key);
-  }
+  const queued = await queue.getJobs(['waiting', 'delayed', 'prioritized']);
+  const leftovers = queued.filter((job) => job.repeatJobKey && keys.has(job.repeatJobKey));
+  for (const job of leftovers) await job.remove();
+
   logger.info(
-    { schedulers: [...wanted], everyHours: everyMs / 3_600_000 },
-    'Fetch schedulers in sync',
+    { removed: [...keys], queuedJobsRemoved: leftovers.length },
+    'Removed BullMQ fetch schedulers (the CronJob schedules fetches)',
   );
 }
