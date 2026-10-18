@@ -4,6 +4,7 @@ import {
   QUEUE,
   type FetchSourceData,
   type GenerateCvData,
+  type RescoreUserData,
   type ScoreListingData,
 } from '@jobpilot/shared';
 
@@ -12,6 +13,7 @@ export {
   QUEUE,
   type FetchSourceData,
   type GenerateCvData,
+  type RescoreUserData,
   type ScoreListingData,
 } from '@jobpilot/shared';
 
@@ -46,11 +48,13 @@ export interface Queues {
   scoreListing: Queue<ScoreListingData>;
   /** Jobs are added by the API; the worker only needs the queue for Bull Board. */
   generateCv: Queue<GenerateCvData>;
+  /** Added by the API when a skill profile changes. */
+  rescoreUser: Queue<RescoreUserData>;
 }
 
 /** Every queue, for code that treats them alike (Bull Board, shutdown). */
 export function allQueues(queues: Queues): Queue[] {
-  return [queues.fetchSource, queues.scoreListing, queues.generateCv];
+  return [queues.fetchSource, queues.scoreListing, queues.generateCv, queues.rescoreUser];
 }
 
 export function createQueues(connection: Redis, prefix?: string): Queues {
@@ -66,6 +70,7 @@ export function createQueues(connection: Redis, prefix?: string): Queues {
       defaultJobOptions: SCORE_JOB_OPTIONS,
     }),
     generateCv: new Queue<GenerateCvData>(QUEUE.generateCv, { connection, prefix }),
+    rescoreUser: new Queue<RescoreUserData>(QUEUE.rescoreUser, { connection, prefix }),
   };
 }
 
