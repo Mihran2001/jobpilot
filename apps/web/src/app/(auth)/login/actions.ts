@@ -1,6 +1,7 @@
 'use server';
 
 import { loginSchema } from '@jobpilot/shared';
+import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { env } from '@/lib/env';
 import { readSessionFromSetCookie, setSessionCookie } from '@/lib/session';
@@ -10,6 +11,11 @@ import { safeNextPath } from '@/lib/redirect';
 export interface LoginState {
   error?: string;
   email?: string;
+}
+
+function forwardedFor(incoming: Headers): Record<string, string> {
+  const chain = incoming.get('x-forwarded-for');
+  return chain ? { 'x-forwarded-for': chain } : {};
 }
 
 export async function login(_prev: LoginState, formData: FormData): Promise<LoginState> {
@@ -22,7 +28,12 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   const res = await fetch(`${env.API_INTERNAL_URL}/api/auth/login`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      'content-type': 'application/json',
+      // Pass the client's address chain on, so the API rate-limits per
+      // client rather than per web pod. The API decides which hops to trust.
+      ...forwardedFor(await headers()),
+    },
     body: JSON.stringify(input.data),
     signal: AbortSignal.timeout(15_000),
   });

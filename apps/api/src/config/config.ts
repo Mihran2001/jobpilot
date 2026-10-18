@@ -13,6 +13,12 @@ const envSchema = z
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
       .default('info'),
+    /**
+     * Express "trust proxy": the hops allowed to set X-Forwarded-For. Inside
+     * Kubernetes the web pods and the gateway are on private addresses
+     * ("uniquelocal"); locally nothing sits in front ("loopback").
+     */
+    TRUST_PROXY: z.string().min(1).default('loopback'),
     REDIS_URL: z.url(),
     /** BullMQ key prefix. Tests use a unique one so they never see real jobs. */
     BULLMQ_PREFIX: z.string().min(1).default('bull'),
