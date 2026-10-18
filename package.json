@@ -25,7 +25,8 @@
     "db:deploy": "pnpm --filter @jobpilot/db migrate:deploy",
     "db:seed": "pnpm --filter @jobpilot/db seed",
     "k8s:up": "infra/k8s/up.sh",
-    "k8s:down": "kind delete cluster --name jobpilot"
+    "k8s:down": "kind delete cluster --name jobpilot",
+    "aws:deploy": "infra/aws/deploy.sh"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

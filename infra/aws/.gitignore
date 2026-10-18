@@ -1,0 +1,6 @@
+# Local state holds secrets (database password): never commit it.
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+crash.log

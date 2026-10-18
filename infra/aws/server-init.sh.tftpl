@@ -1,0 +1,26 @@
+#!/bin/bash
+# First boot of the JobPilot server (Amazon Linux 2023, ARM). Installs k3s
+# and records non-secret facts for the deploy script. Everything else
+# (gateway, certificates, the app) is done by infra/aws/server-deploy.sh, run
+# from the same commit as the code it deploys.
+# Logs: /var/log/cloud-init-output.log
+set -euxo pipefail
+
+mkdir -p /opt/jobpilot
+cat > /opt/jobpilot/instance.env <<'ENV'
+${instance_env}
+ENV
+
+# k3s, pinned. Traefik is disabled: Envoy Gateway handles traffic, as in kind.
+# ServiceLB stays: it publishes the gateway's LoadBalancer Service on the
+# machine's own ports 80 and 443.
+curl -sfL https://get.k3s.io \
+  | INSTALL_K3S_VERSION='${k3s_version}' sh -s - server \
+      --disable traefik \
+      --write-kubeconfig-mode 0600
+
+# Wait until the node is ready, so the first deploy finds a working cluster.
+until /usr/local/bin/kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get nodes 2>/dev/null | grep -q ' Ready'; do
+  sleep 5
+done
+touch /opt/jobpilot/ready
