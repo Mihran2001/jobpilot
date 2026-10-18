@@ -75,20 +75,22 @@ export class CvService {
     // Per-user quota: each CV is a Chrome run on a small server.
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
-    if ((await this.cv.countGeneratedSince(userId, today)) >= this.config.CV_DAILY_LIMIT) {
+    const version = await this.cv.createGeneratedWithinQuota(
+      {
+        userId,
+        applicationId,
+        s3Key: `users/${userId}/cv/${randomUUID()}.pdf`,
+        fileName: pdfName(profile.fullName, application.jobListing.title),
+      },
+      today,
+      this.config.CV_DAILY_LIMIT,
+    );
+    if (!version) {
       throw new HttpException(
         `Daily limit of ${this.config.CV_DAILY_LIMIT} generated CVs reached; try again tomorrow`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-
-    const version = await this.cv.createVersion({
-      userId,
-      applicationId,
-      source: 'GENERATED',
-      s3Key: `users/${userId}/cv/${randomUUID()}.pdf`,
-      fileName: pdfName(profile.fullName, application.jobListing.title),
-    });
 
     try {
       // BullMQ waits for Redis to be reachable, potentially forever, so the

@@ -1,5 +1,15 @@
 import { deleteAccountSchema, type DeleteAccountInput } from '@jobpilot/shared';
-import { Body, Controller, Delete, HttpCode, HttpStatus, Inject, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { APP_CONFIG, type AppConfig } from '../../config/config.js';
 import { AccountService } from './account.service.js';
@@ -14,7 +24,12 @@ export class AccountController {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
-  /** Deletes the account and everything that belongs to it, files included. */
+  /**
+   * Deletes the account and everything that belongs to it, files included.
+   * Rate-limited like login: it checks the password, so a stolen session
+   * must not be able to guess it here.
+   */
+  @UseGuards(ThrottlerGuard)
   @Delete('me')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteMe(

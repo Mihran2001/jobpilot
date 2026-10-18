@@ -179,8 +179,10 @@ describe('multi-user: profiles, saved searches, alerts, quotas, deletion', () =>
         const generate = () =>
           request(srv).post(`/api/applications/${app.body.id}/cv`).set('Cookie', cookie);
 
-        await generate().expect(202);
-        await generate().expect(202);
+        // Fired at once: without the lock, all six would count 0 and pass.
+        const results = await Promise.all(Array.from({ length: 6 }, () => generate()));
+        const statuses = results.map((r) => r.status).sort();
+        expect(statuses).toEqual([202, 202, 429, 429, 429, 429]);
         const res = await generate().expect(429);
         expect(res.body.message).toBe('Daily limit of 2 generated CVs reached; try again tomorrow');
       } finally {
@@ -190,6 +192,25 @@ describe('multi-user: profiles, saved searches, alerts, quotas, deletion', () =>
   });
 
   describe('account deletion', () => {
+    it('is rate-limited like login, since it checks a password', async () => {
+      const strict = await createTestApp({ AUTH_RATE_LIMIT_PER_MINUTE: 2 });
+      try {
+        const srv = strict.app.getHttpServer();
+        const cookie = await registerUser(srv, 'dave@example.com');
+        const attempt = () =>
+          request(srv)
+            .delete('/api/users/me')
+            .set('Cookie', cookie)
+            .send({ password: 'guess-guess-1' });
+        // The limit is counted per route, like login and register.
+        await attempt().expect(401);
+        await attempt().expect(401);
+        await attempt().expect(429);
+      } finally {
+        await strict.app.close();
+      }
+    });
+
     it('needs the password', async () => {
       await as(ada).delete('/api/users/me', { password: 'wrong password!!' }).expect(401);
       expect(await t.prisma.user.count({ where: { id: adaId } })).toBe(1);
