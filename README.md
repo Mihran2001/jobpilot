@@ -82,16 +82,16 @@ Then open http://localhost:8080. `pnpm k8s:down` deletes the whole cluster.
 
 ## Deploy to AWS
 
-One EC2 instance (`t4g.medium`, ARM) runs k3s with the same manifests as the local cluster, plus RDS PostgreSQL, S3 for CVs and ECR for images, in Frankfurt (`eu-central-1`). Everything is defined with OpenTofu in `infra/aws/`.
+One EC2 instance (`t4g.medium`, ARM) runs k3s with the same manifests as the local cluster, plus RDS PostgreSQL, S3 for CVs and ECR for images, in Stockholm (`eu-north-1`). Everything is defined with OpenTofu in `infra/aws/`.
 
-**Cost while running: about $52/month** (on-demand, October 2026 price list):
+**Cost while running: about $47/month** (on-demand, Stockholm, October 2026 price list; Frankfurt would be about $52):
 
 | Item                                     | $/month                 |
 | ---------------------------------------- | ----------------------- |
-| EC2 `t4g.medium`                         | 28.03                   |
+| EC2 `t4g.medium`                         | 25.11                   |
 | 30 GB gp3 disk                           | ~3.00                   |
 | Public IPv4 address                      | 3.65                    |
-| RDS PostgreSQL `db.t4g.micro` + 20 GB    | 16.61                   |
+| RDS PostgreSQL `db.t4g.micro` + 20 GB    | 14.08                   |
 | ECR (~10 GB, 5 images kept per app) + S3 | ~1.10                   |
 | Redis                                    | 0 (a pod on the server) |
 
@@ -102,7 +102,7 @@ Stopping the instance and the database when unused brings it to about $6/month (
 1. Create an AWS account at https://aws.amazon.com (free plan: $100 in credits, up to $200, for 6 months).
 2. Turn on MFA for the root user. Do not use the root user for anything else.
 3. IAM Identity Center: enable it, create a user for yourself, and give it the `AdministratorAccess` permission set on your account.
-4. On your Mac: `aws configure sso --profile jobpilot` (region `eu-central-1`), then `aws sts get-caller-identity --profile jobpilot` to check. The CLI keeps short-lived credentials; no access keys are stored.
+4. On your Mac: `aws login --profile jobpilot --region eu-north-1` (browser sign-in; credentials last 12 hours and renew for up to 90 days), then `aws sts get-caller-identity --profile jobpilot` to check. No access keys are stored.
 
 ### Create, deploy, check
 
@@ -116,7 +116,7 @@ tofu -chdir=infra/aws output url                               # https://<ip>.ss
 tofu -chdir=infra/aws output -raw app_password                 # log in as dev@jobpilot.test
 ```
 
-Later deploys: push to GitHub, then `pnpm aws:deploy`. For CI to push images itself, set two repository variables on GitHub (Settings, Secrets and variables, Actions, Variables): `AWS_ROLE_ARN` = `tofu output -raw github_role_arn`, `AWS_REGION` = `eu-central-1`.
+Later deploys: push to GitHub, then `pnpm aws:deploy`. For CI to push images itself, set two repository variables on GitHub (Settings, Secrets and variables, Actions, Variables): `AWS_ROLE_ARN` = `tofu output -raw github_role_arn`, `AWS_REGION` = `eu-north-1`.
 
 How a deploy works: `deploy.sh` (your Mac) builds and pushes any missing images, then sends `server-deploy.sh` to the server through SSM Run Command. The server downloads that commit from GitHub, installs or updates Envoy Gateway and cert-manager, pulls the images from ECR with its IAM role, writes config and secrets (from SSM Parameter Store), and runs the same `infra/k8s/apply.sh` as the local cluster. No SSH port is open; for a shell use `aws ssm start-session --target $(tofu -chdir=infra/aws output -raw instance_id) --profile jobpilot`.
 

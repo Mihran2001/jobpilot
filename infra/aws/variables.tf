@@ -5,9 +5,9 @@ variable "aws_profile" {
 }
 
 variable "region" {
-  description = "AWS region. Frankfurt: the closest common region to UTC+4."
+  description = "AWS region. Stockholm: the account's home region, and cheaper than Frankfurt for this setup."
   type        = string
-  default     = "eu-central-1"
+  default     = "eu-north-1"
 }
 
 variable "project" {
@@ -27,7 +27,7 @@ variable "notification_email" {
 }
 
 variable "monthly_budget_usd" {
-  description = "Budget alert threshold. Option A is about $52/month when running."
+  description = "Budget alert threshold. Option A is about $47/month when running."
   type        = number
   default     = 60
 }
