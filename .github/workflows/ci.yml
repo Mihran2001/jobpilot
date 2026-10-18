@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'stage-*']
+  pull_request:
+
+# A newer push to the same branch cancels the run still in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck, lint, test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    # Real Postgres and Redis, as the brief asks: only third-party HTTP is faked.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: jobpilot
+          POSTGRES_PASSWORD: jobpilot_ci
+          POSTGRES_DB: jobpilot
+        ports: ['5434:5432']
+        options: >-
+          --health-cmd "pg_isready -U jobpilot"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://jobpilot:jobpilot_ci@localhost:5434/jobpilot_test
+      TEST_REDIS_URL: redis://localhost:6379/1
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: jobpilot
+      S3_SECRET_ACCESS_KEY: jobpilot_ci_secret
+      S3_FORCE_PATH_STYLE: 'true'
+      TEST_S3_BUCKET: jobpilot-test
+      # GitHub's Ubuntu runners come with Google Chrome; the real-Chrome tests use it.
+      CHROME_PATH: /usr/bin/google-chrome
+      CHROME_NO_SANDBOX: 'true'
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Service containers cannot be given a command, and MinIO needs "server /data".
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=$S3_ACCESS_KEY_ID -e MINIO_ROOT_PASSWORD=$S3_SECRET_ACCESS_KEY \
+            cgr.dev/chainguard/minio@sha256:25bc63a89475bc494bfbce9bbeddb0421aece3f3968d77c809db5104d07b4545 \
+            server /data
+          for i in $(seq 1 30); do curl -sf http://localhost:9000/minio/health/live && exit 0; sleep 1; done
+          exit 1
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0 (version from packageManager)
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test
+
+  images:
+    name: Image ${{ matrix.app }}
+    needs: check
+    # Native ARM runners (free for public repositories): the server is ARM too.
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, worker, web, migrate]
+    permissions:
+      contents: read
+      id-token: write # lets the job exchange GitHub's OIDC token for AWS credentials
+    env:
+      # Push only from main, and only once the AWS role exists (set after `tofu apply`).
+      PUSH: ${{ github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: AWS credentials (OIDC, no stored keys)
+        if: env.PUSH == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Log in to ECR
+        if: env.PUSH == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build${{ env.PUSH == 'true' && ' and push' || '' }}
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: infra/docker/${{ matrix.app }}.Dockerfile
+          platforms: linux/arm64
+          push: ${{ env.PUSH == 'true' }}
+          tags: ${{ env.PUSH == 'true' && format('{0}/jobpilot/{1}:{2}', steps.ecr.outputs.registry, matrix.app, github.sha) || format('jobpilot/{0}:ci', matrix.app) }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
