@@ -16,6 +16,12 @@ export const loginSchema = z.object({
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
+/** Deleting an account asks for the password again, so a stolen session cannot. */
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1).max(128),
+});
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
+
 /** What the API returns for a user. Never includes the password hash. */
 export const userResponseSchema = z.object({
   id: z.uuid(),
