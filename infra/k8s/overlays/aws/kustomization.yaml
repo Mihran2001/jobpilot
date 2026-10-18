@@ -16,6 +16,14 @@ configMapGenerator:
 secretGenerator:
   - name: jobpilot-secrets
     envs: [secrets.env]
+# A 2 GB server (the free plan's limit): one api and one web pod instead of
+# two. Rollouts still start the new pod before stopping the old one
+# (maxSurge 1, maxUnavailable 0), so they still drop nothing.
+replicas:
+  - name: api
+    count: 1
+  - name: web
+    count: 1
 patches:
   # The public hostname gets an HTTPS listener with a Let's Encrypt certificate;
   # plain HTTP only redirects (see tls.yaml).

@@ -27,15 +27,20 @@ variable "notification_email" {
 }
 
 variable "monthly_budget_usd" {
-  description = "Budget alert threshold. Option A is about $47/month when running."
+  description = "Budget alert threshold. The setup is about $34/month when running."
   type        = number
   default     = 60
 }
 
 variable "instance_type" {
-  description = "t4g.medium: 2 ARM vCPUs, 4 GB. Enough for k3s, gateway, 5 app pods and Chrome."
+  description = <<-EOT
+    t4g.small: 2 ARM vCPUs, 2 GB. The free plan only allows Free Tier eligible
+    types; this is the cheapest that runs the ARM images. It is tight, so the
+    AWS overlay runs one api and one web pod and the server has 2 GB of swap.
+    On a paid plan, t4g.medium (4 GB) is the comfortable choice.
+  EOT
   type        = string
-  default     = "t4g.medium"
+  default     = "t4g.small"
 }
 
 variable "db_instance_class" {

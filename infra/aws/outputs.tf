@@ -16,11 +16,6 @@ output "ecr_registry" {
   value = "${local.account_id}.dkr.ecr.${var.region}.amazonaws.com"
 }
 
-output "github_role_arn" {
-  description = "Set as the GitHub repository variable AWS_ROLE_ARN."
-  value       = aws_iam_role.github_ci.arn
-}
-
 output "app_login" {
   description = "Seeded user. Run: tofu output -raw app_password"
   value       = "dev@jobpilot.test"

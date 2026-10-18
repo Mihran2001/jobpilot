@@ -11,12 +11,22 @@ cat > /opt/jobpilot/instance.env <<'ENV'
 ${instance_env}
 ENV
 
+# 2 GB of swap: with 2 GB of memory, a Chrome render on top of everything
+# else would otherwise get the worker killed; with swap it just slows down.
+fallocate -l 2G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo '/swapfile none swap sw 0 0' >> /etc/fstab
+
 # k3s, pinned. Traefik is disabled: Envoy Gateway handles traffic, as in kind.
+# metrics-server is disabled too: nothing uses it, and memory is scarce.
 # ServiceLB stays: it publishes the gateway's LoadBalancer Service on the
 # machine's own ports 80 and 443.
 curl -sfL https://get.k3s.io \
   | INSTALL_K3S_VERSION='${k3s_version}' sh -s - server \
       --disable traefik \
+      --disable metrics-server \
       --write-kubeconfig-mode 0600
 
 # Wait until the node is ready, so the first deploy finds a working cluster.

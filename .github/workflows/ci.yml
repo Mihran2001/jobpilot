@@ -81,42 +81,25 @@ jobs:
     name: Image ${{ matrix.app }}
     needs: check
     # Native ARM runners (free for public repositories): the server is ARM too.
+    # Images are only built here, to prove every Dockerfile works. They are
+    # pushed to ECR by `pnpm aws:deploy`: the AWS free plan does not allow the
+    # GitHub OIDC provider that CI would need to push without stored keys.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         app: [api, worker, web, migrate]
-    permissions:
-      contents: read
-      id-token: write # lets the job exchange GitHub's OIDC token for AWS credentials
-    env:
-      # Push only from main, and only once the AWS role exists (set after `tofu apply`).
-      PUSH: ${{ github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: AWS credentials (OIDC, no stored keys)
-        if: env.PUSH == 'true'
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Log in to ECR
-        if: env.PUSH == 'true'
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
-
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Build${{ env.PUSH == 'true' && ' and push' || '' }}
+      - name: Build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           file: infra/docker/${{ matrix.app }}.Dockerfile
           platforms: linux/arm64
-          push: ${{ env.PUSH == 'true' }}
-          tags: ${{ env.PUSH == 'true' && format('{0}/jobpilot/{1}:{2}', steps.ecr.outputs.registry, matrix.app, github.sha) || format('jobpilot/{0}:ci', matrix.app) }}
+          push: false
+          tags: jobpilot/${{ matrix.app }}:ci
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}

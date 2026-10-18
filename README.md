@@ -2,7 +2,7 @@
 
 A personal job-hunt command center: it aggregates remote job listings, scores them against a skill profile, tracks applications through their stages, generates a tailored CV PDF per listing, and exports application history as CSV.
 
-This is a learning and portfolio project built in stages. **Current state: stage 6 (AWS).** A Next.js dashboard on top of a NestJS API and a BullMQ worker. It runs locally with `pnpm dev:*`, in a local Kubernetes cluster with `pnpm k8s:up`, and on AWS (one EC2 instance running k3s, RDS, S3, ECR) with OpenTofu and `pnpm aws:deploy`. CI on GitHub Actions typechecks, lints, tests and builds ARM images.
+This is a learning and portfolio project built in stages. **Current state: stage 6 (AWS).** A Next.js dashboard on top of a NestJS API and a BullMQ worker. It runs locally with `pnpm dev:*`, in a local Kubernetes cluster with `pnpm k8s:up`, and on AWS (one EC2 instance running k3s, RDS, S3, ECR) with OpenTofu and `pnpm aws:deploy`. CI on GitHub Actions typechecks, lints, tests and builds the ARM images.
 
 ## Requirements
 
@@ -82,18 +82,20 @@ Then open http://localhost:8080. `pnpm k8s:down` deletes the whole cluster.
 
 ## Deploy to AWS
 
-One EC2 instance (`t4g.medium`, ARM) runs k3s with the same manifests as the local cluster, plus RDS PostgreSQL, S3 for CVs and ECR for images, in Stockholm (`eu-north-1`). Everything is defined with OpenTofu in `infra/aws/`.
+One EC2 instance (`t4g.small`, ARM, 2 GB) runs k3s with the same manifests as the local cluster, plus RDS PostgreSQL, S3 for CVs and ECR for images, in Stockholm (`eu-north-1`). Everything is defined with OpenTofu in `infra/aws/`.
 
-**Cost while running: about $47/month** (on-demand, Stockholm, October 2026 price list; Frankfurt would be about $52):
+**Cost while running: about $34/month** (on-demand, Stockholm, October 2026 price list), paid from the free plan's credits:
 
 | Item                                     | $/month                 |
 | ---------------------------------------- | ----------------------- |
-| EC2 `t4g.medium`                         | 25.11                   |
+| EC2 `t4g.small` (2 vCPU, 2 GB)           | 12.56                   |
 | 30 GB gp3 disk                           | ~3.00                   |
 | Public IPv4 address                      | 3.65                    |
 | RDS PostgreSQL `db.t4g.micro` + 20 GB    | 14.08                   |
 | ECR (~10 GB, 5 images kept per app) + S3 | ~1.10                   |
 | Redis                                    | 0 (a pod on the server) |
+
+**Free plan limits, found on the first apply:** only Free Tier eligible instance types may run (`t4g.medium`, the original choice, was refused), and a service control policy denies creating the GitHub OIDC provider. So the server is a `t4g.small` with 2 GB of swap, the AWS overlay runs one api and one web pod, and images are pushed by `pnpm aws:deploy` instead of CI. On a paid plan, `t4g.medium` (~$47/month total) and CI pushes via OIDC would be the natural upgrade.
 
 Stopping the instance and the database when unused brings it to about $6/month (storage only; AWS restarts a stopped RDS instance after 7 days). Rejected alternatives: ECS Fargate (~$105/month, new task definitions instead of these manifests) and EKS (~$195/month: the control plane alone is $73).
 
@@ -116,7 +118,7 @@ tofu -chdir=infra/aws output url                               # https://<ip>.ss
 tofu -chdir=infra/aws output -raw app_password                 # log in as dev@jobpilot.test
 ```
 
-Later deploys: push to GitHub, then `pnpm aws:deploy`. For CI to push images itself, set two repository variables on GitHub (Settings, Secrets and variables, Actions, Variables): `AWS_ROLE_ARN` = `tofu output -raw github_role_arn`, `AWS_REGION` = `eu-north-1`.
+Later deploys: push to GitHub, then `pnpm aws:deploy`.
 
 How a deploy works: `deploy.sh` (your Mac) builds and pushes any missing images, then sends `server-deploy.sh` to the server through SSM Run Command. The server downloads that commit from GitHub, installs or updates Envoy Gateway and cert-manager, pulls the images from ECR with its IAM role, writes config and secrets (from SSM Parameter Store), and runs the same `infra/k8s/apply.sh` as the local cluster. No SSH port is open; for a shell use `aws ssm start-session --target $(tofu -chdir=infra/aws output -raw instance_id) --profile jobpilot`.
 
@@ -126,7 +128,7 @@ How a deploy works: `deploy.sh` (your Mac) builds and pushes any missing images,
 cd infra/aws && tofu destroy
 ```
 
-That deletes the instance and its disk, the IP address, the database (no final snapshot unless `keep_final_db_snapshot = true`), the S3 bucket with all CVs, the ECR repositories with all images, the SSM parameters, IAM roles, the GitHub OIDC provider, the budget, and the VPC. Then check nothing is left: AWS console, Resource Groups and Tag Editor, search all regions for tag `Project = jobpilot`; and Billing, Bills, for the current month. Remove the GitHub variables `AWS_ROLE_ARN` and `AWS_REGION`.
+That deletes the instance and its disk, the IP address, the database (no final snapshot unless `keep_final_db_snapshot = true`), the S3 bucket with all CVs, the ECR repositories with all images, the SSM parameters, the IAM role, the budget, and the VPC. Then check nothing is left: AWS console, Resource Groups and Tag Editor, search all regions for tag `Project = jobpilot`; and Billing, Bills, for the current month.
 
 ## Web app
 
