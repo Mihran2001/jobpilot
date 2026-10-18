@@ -1,8 +1,10 @@
 import {
   CreateBucketCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   NotFound,
   PutObjectCommand,
   S3Client,
@@ -57,6 +59,8 @@ export interface Storage {
     file: { contentType: string; sizeBytes: number },
     expiresInSeconds?: number,
   ): Promise<PresignedUpload>;
+  /** Deletes every object whose key starts with `prefix`; returns how many. */
+  deletePrefix(prefix: string): Promise<number>;
   /** Creates the bucket if missing. For local development and tests only. */
   ensureBucket(): Promise<void>;
   destroy(): void;
@@ -149,6 +153,28 @@ export function createStorage(config: StorageConfig): Storage {
         expiresAt: expiry(expiresInSeconds),
         headers: { 'content-type': file.contentType, 'content-length': String(file.sizeBytes) },
       };
+    },
+
+    async deletePrefix(prefix) {
+      if (!prefix.endsWith('/'))
+        throw new Error('deletePrefix needs a "folder" prefix ending in /');
+      let deleted = 0;
+      let token: string | undefined;
+      do {
+        // At most 1,000 keys per page, which is also DeleteObjects' limit.
+        const page = await client.send(
+          new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }),
+        );
+        const keys = (page.Contents ?? []).flatMap((o) => (o.Key ? [{ Key: o.Key }] : []));
+        if (keys.length > 0) {
+          await client.send(
+            new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys } }),
+          );
+          deleted += keys.length;
+        }
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+      return deleted;
     },
 
     async ensureBucket() {
