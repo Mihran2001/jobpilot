@@ -64,6 +64,7 @@ model User {
   cvVersions    CvVersion[]
   sessions      Session[]
   cvProfile     CvProfile?
+  savedSearches SavedSearch[]
 
   @@map("users")
 }
@@ -136,6 +137,7 @@ model JobListing {
   company      Company        @relation(fields: [companyId], references: [id], onDelete: Restrict)
   scores       ListingScore[]
   applications Application[]
+  matches      SearchMatch[]
 
   // The idempotency key for ingestion: fetching a source twice upserts on this.
   @@unique([sourceId, externalId])
@@ -229,4 +231,35 @@ model CvVersion {
   application Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
 
   @@map("cv_versions")
+}
+
+// A named set of listing filters. New listings that match it become alerts.
+// `filters` is validated by savedSearchFiltersSchema in @jobpilot/shared.
+model SavedSearch {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  filters   Json
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matches SearchMatch[]
+
+  @@map("saved_searches")
+}
+
+// An in-app alert: a listing that matched a saved search after it was saved.
+// Written by the worker right after it scores the listing for that user
+// (minScore needs the user's score). The primary key makes it idempotent.
+model SearchMatch {
+  savedSearchId String    @map("saved_search_id") @db.Uuid
+  jobListingId  String    @map("job_listing_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  seenAt        DateTime? @map("seen_at") @db.Timestamptz(3)
+
+  savedSearch SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+  jobListing  JobListing  @relation(fields: [jobListingId], references: [id], onDelete: Cascade)
+
+  @@id([savedSearchId, jobListingId])
+  @@map("search_matches")
 }
