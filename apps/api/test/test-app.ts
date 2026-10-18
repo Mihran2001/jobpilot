@@ -23,6 +23,7 @@ export async function createTestApp(overrides: Partial<AppConfig> = {}): Promise
     AUTH_RATE_LIMIT_PER_MINUTE: 1000,
     LOG_LEVEL: 'silent',
     TRUST_PROXY: 'loopback',
+    CV_DAILY_LIMIT: 20,
     REDIS_URL: inject('redisUrl'),
     // A fresh prefix per app: this test's jobs are invisible to anything else.
     BULLMQ_PREFIX: `test-${randomUUID()}`,

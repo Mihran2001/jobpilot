@@ -19,6 +19,8 @@ const envSchema = z
      * ("uniquelocal"); locally nothing sits in front ("loopback").
      */
     TRUST_PROXY: z.string().min(1).default('loopback'),
+    /** Tailored CVs one user may generate per UTC day (Chrome is the expensive part). */
+    CV_DAILY_LIMIT: z.coerce.number().int().min(1).default(20),
     REDIS_URL: z.url(),
     /** BullMQ key prefix. Tests use a unique one so they never see real jobs. */
     BULLMQ_PREFIX: z.string().min(1).default('bull'),

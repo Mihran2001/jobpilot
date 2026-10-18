@@ -153,17 +153,23 @@ describe('generate-cv', () => {
     });
   });
 
-  it.skipIf(!inject('chromePath'))('produces a real PDF end to end with Chrome', async () => {
-    const { version } = await setup();
-    await processorWith((html) =>
-      htmlToPdf(html, {
-        chromePath: inject('chromePath'),
-        timeoutMs: 30_000,
-        noSandbox: process.env.CHROME_NO_SANDBOX === 'true',
-      }),
-    )(job(version.id));
-    const pdf = await readObject(version.s3Key);
-    expect(pdf.startsWith('%PDF-')).toBe(true);
-    expect(pdf.length).toBeGreaterThan(5_000);
-  });
+  it.skipIf(!inject('chromePath'))(
+    'produces a real PDF end to end with Chrome',
+    async () => {
+      const { version } = await setup();
+      await processorWith((html) =>
+        htmlToPdf(html, {
+          chromePath: inject('chromePath'),
+          timeoutMs: 30_000,
+          noSandbox: process.env.CHROME_NO_SANDBOX === 'true',
+        }),
+      )(job(version.id));
+      const pdf = await readObject(version.s3Key);
+      expect(pdf.startsWith('%PDF-')).toBe(true);
+      expect(pdf.length).toBeGreaterThan(5_000);
+      // Above Chrome's own 30 s timeout, so a stuck Chrome fails with our error,
+      // not Vitest's. A cold CI runner can take more than the default 5 s.
+    },
+    40_000,
+  );
 });

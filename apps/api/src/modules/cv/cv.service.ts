@@ -10,6 +10,8 @@ import {
 } from '@jobpilot/shared';
 import type { Storage } from '@jobpilot/storage';
 import {
+  HttpException,
+  HttpStatus,
   BadRequestException,
   ConflictException,
   Inject,
@@ -19,29 +21,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Queue } from 'bullmq';
+import { ENQUEUE_TIMEOUT_MS, withTimeout } from '../../common/with-timeout.js';
+import { APP_CONFIG, type AppConfig } from '../../config/config.js';
 import { GENERATE_CV_QUEUE } from '../../infra/queue/queue.module.js';
 import { STORAGE } from '../../infra/storage/storage.module.js';
 import { toCvVersionResponse } from './cv.mapper.js';
 import { CvRepository } from './cv.repository.js';
-
-/** How long a request may wait for Redis before answering 503. */
-const ENQUEUE_TIMEOUT_MS = 3_000;
-
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err: unknown) => {
-        clearTimeout(timer);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      },
-    );
-  });
-}
 
 /** Characters that break file names on some systems. */
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
@@ -60,6 +45,7 @@ export class CvService {
     private readonly cv: CvRepository,
     @Inject(STORAGE) private readonly storage: Storage,
     @Inject(GENERATE_CV_QUEUE) private readonly generateQueue: Queue<GenerateCvData>,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   async getProfile(userId: string): Promise<CvProfile> {
@@ -86,13 +72,25 @@ export class CvService {
     const profile = await this.getProfile(userId).catch(() => null);
     if (!profile) throw new BadRequestException('Fill in your CV profile first');
 
-    const version = await this.cv.createVersion({
-      userId,
-      applicationId,
-      source: 'GENERATED',
-      s3Key: `users/${userId}/cv/${randomUUID()}.pdf`,
-      fileName: pdfName(profile.fullName, application.jobListing.title),
-    });
+    // Per-user quota: each CV is a Chrome run on a small server.
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const version = await this.cv.createGeneratedWithinQuota(
+      {
+        userId,
+        applicationId,
+        s3Key: `users/${userId}/cv/${randomUUID()}.pdf`,
+        fileName: pdfName(profile.fullName, application.jobListing.title),
+      },
+      today,
+      this.config.CV_DAILY_LIMIT,
+    );
+    if (!version) {
+      throw new HttpException(
+        `Daily limit of ${this.config.CV_DAILY_LIMIT} generated CVs reached; try again tomorrow`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
     try {
       // BullMQ waits for Redis to be reachable, potentially forever, so the

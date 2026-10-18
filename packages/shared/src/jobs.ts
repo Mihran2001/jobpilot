@@ -6,6 +6,7 @@ export const QUEUE = {
   fetchSource: 'fetch-source',
   scoreListing: 'score-listing',
   generateCv: 'generate-cv',
+  rescoreUser: 'rescore-user',
 } as const;
 
 export interface FetchSourceData {
@@ -20,4 +21,9 @@ export interface ScoreListingData {
 /** Everything else (user, application, listing) is read from the cv_versions row. */
 export interface GenerateCvData {
   cvVersionId: string;
+}
+
+/** After a skill profile changes: score every listing again for that user. */
+export interface RescoreUserData {
+  userId: string;
 }

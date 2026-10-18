@@ -8,12 +8,14 @@ import { PrismaModule } from './infra/prisma/prisma.module.js';
 import { QueueModule } from './infra/queue/queue.module.js';
 import { StorageModule } from './infra/storage/storage.module.js';
 import { loggerParams } from './logging.js';
+import { AlertsModule } from './modules/alerts/alerts.module.js';
 import { ApplicationsModule } from './modules/applications/applications.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { CvModule } from './modules/cv/cv.module.js';
 import { ExportsModule } from './modules/exports/exports.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { ListingsModule } from './modules/listings/listings.module.js';
+import { ProfileModule } from './modules/profile/profile.module.js';
 import { SourcesModule } from './modules/sources/sources.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
@@ -41,6 +43,8 @@ export class AppModule {
         ApplicationsModule,
         CvModule,
         ExportsModule,
+        ProfileModule,
+        AlertsModule,
       ],
       providers: [
         { provide: APP_CONFIG, useValue: config },

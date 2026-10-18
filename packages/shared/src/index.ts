@@ -1,3 +1,4 @@
+export * from './alerts.js';
 export * from './applications.js';
 export * from './auth.js';
 export * from './cv.js';

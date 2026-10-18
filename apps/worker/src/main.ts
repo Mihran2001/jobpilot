@@ -8,6 +8,7 @@ import { loadRootEnvFile } from './env-file.js';
 import { htmlToPdf } from './cv/chrome.js';
 import { createFetchSourceProcessor } from './jobs/fetch-source.js';
 import { createGenerateCvProcessor } from './jobs/generate-cv.js';
+import { createRescoreUserProcessor } from './jobs/rescore-user.js';
 import { createScoreListingProcessor } from './jobs/score-listing.js';
 import { createLogger } from './logger.js';
 import { allQueues, createQueues, createRedis, enqueueScores, QUEUE } from './queues.js';
@@ -67,6 +68,14 @@ const workers = [
         }),
     }),
     { connection, concurrency: config.CV_CONCURRENCY },
+  ),
+  new Worker(
+    QUEUE.rescoreUser,
+    createRescoreUserProcessor({
+      prisma,
+      enqueueScores: (pairs) => enqueueScores(queues.scoreListing, pairs),
+    }),
+    { connection, concurrency: 1 },
   ),
 ];
 

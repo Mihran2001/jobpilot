@@ -34,6 +34,28 @@ export class CvRepository {
     return this.prisma.cvVersion.findFirst({ where: { id, userId } });
   }
 
+  /**
+   * Creates a generated version unless the user already has `limit` since
+   * `since`; returns null when over the limit. The count and the insert run
+   * under a per-user advisory lock, so concurrent requests queue up instead
+   * of all seeing the same pre-insert count.
+   */
+  createGeneratedWithinQuota(
+    data: Omit<Prisma.CvVersionUncheckedCreateInput, 'source'>,
+    since: Date,
+    limit: number,
+  ): Promise<CvVersion | null> {
+    return this.prisma.$transaction(async (tx) => {
+      // Released automatically at commit or rollback.
+      await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${`cv-quota:${data.userId}`}, 0))`;
+      const used = await tx.cvVersion.count({
+        where: { userId: data.userId, source: 'GENERATED', createdAt: { gte: since } },
+      });
+      if (used >= limit) return null;
+      return tx.cvVersion.create({ data: { ...data, source: 'GENERATED' } });
+    });
+  }
+
   listVersions(userId: string, applicationId?: string): Promise<CvVersion[]> {
     return this.prisma.cvVersion.findMany({
       where: { userId, applicationId },
