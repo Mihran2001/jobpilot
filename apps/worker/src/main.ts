@@ -11,7 +11,8 @@ import { createGenerateCvProcessor } from './jobs/generate-cv.js';
 import { createScoreListingProcessor } from './jobs/score-listing.js';
 import { createLogger } from './logger.js';
 import { allQueues, createQueues, createRedis, enqueueScores, QUEUE } from './queues.js';
-import { syncFetchSchedulers } from './schedule.js';
+import { removeFetchSchedulers } from './schedule.js';
+import { startHealthServer } from './health.js';
 import { createAdapterRegistry } from './sources/registry.js';
 
 loadRootEnvFile();
@@ -77,19 +78,17 @@ for (const worker of workers) {
   worker.on('error', (err) => logger.error({ queue: worker.name, err }, 'Worker error'));
 }
 
-await syncFetchSchedulers({
-  prisma,
-  queue: queues.fetchSource,
-  adapterNames: new Set(adapters.keys()),
-  everyMs: config.FETCH_INTERVAL_HOURS * 3_600_000,
-  logger,
-});
+await removeFetchSchedulers(queues.fetchSource, logger);
 
 let board: Board | undefined;
 if (config.BULL_BOARD_PORT > 0) {
   board = await startBoard(allQueues(queues), config.BULL_BOARD_PORT);
   logger.info({ url: board.url }, 'Bull Board listening');
 }
+const health =
+  config.WORKER_HEALTH_PORT > 0
+    ? await startHealthServer(config.WORKER_HEALTH_PORT, connection, workers)
+    : undefined;
 logger.info({ scoreConcurrency: config.SCORE_CONCURRENCY }, 'Worker started');
 
 // --- Graceful shutdown -------------------------------------------------------
@@ -112,6 +111,7 @@ async function shutdown(signal: string): Promise<void> {
   }, SHUTDOWN_TIMEOUT_MS);
   timer.unref();
 
+  health?.close();
   await board?.close();
   await Promise.all(workers.map((w) => w.close())); // waits for active jobs
   await Promise.all(allQueues(queues).map((q) => q.close()));

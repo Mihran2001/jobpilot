@@ -13,7 +13,7 @@ import {
   QUEUE,
   type Queues,
 } from '../src/queues.js';
-import { syncFetchSchedulers } from '../src/schedule.js';
+import { removeFetchSchedulers } from '../src/schedule.js';
 import { createAdapterRegistry } from '../src/sources/registry.js';
 import {
   createTestPrisma,
@@ -115,24 +115,13 @@ describe('pipeline through BullMQ', () => {
     ).toEqual(['Full Stack Developer (React, Node.js)', 'Senior Node.js Engineer']);
   });
 
-  it('keeps one scheduler per enabled source, and re-syncing changes nothing', async () => {
-    const { remotive } = await seedSourcesAndUser(prisma);
-    const sync = () =>
-      syncFetchSchedulers({
-        prisma,
-        queue: queues.fetchSource,
-        adapterNames: new Set(['remotive', 'jobicy']),
-        everyMs: 6 * 3_600_000,
-        logger: silentLogger,
-      });
+  it('removes BullMQ fetch schedulers left over from before the CronJob', async () => {
+    await queues.fetchSource.upsertJobScheduler('fetch-remotive', { every: 6 * 3_600_000 });
+    await queues.fetchSource.upsertJobScheduler('fetch-jobicy', { every: 6 * 3_600_000 });
 
-    await sync();
-    await sync(); // a worker restart
-    const ids = async () => (await queues.fetchSource.getJobSchedulers()).map((s) => s.key).sort();
-    expect(await ids()).toEqual(['fetch-jobicy', 'fetch-remotive']);
+    await removeFetchSchedulers(queues.fetchSource, silentLogger);
+    await removeFetchSchedulers(queues.fetchSource, silentLogger); // a second start: nothing to do
 
-    await prisma.source.update({ where: { id: remotive.id }, data: { enabled: false } });
-    await sync();
-    expect(await ids()).toEqual(['fetch-jobicy']);
+    expect(await queues.fetchSource.getJobSchedulers()).toEqual([]);
   });
 });
