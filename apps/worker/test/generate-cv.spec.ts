@@ -53,7 +53,7 @@ describe('generate-cv', () => {
       endpoint: config.endpoint,
       region: config.region,
       forcePathStyle: true,
-      credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+      credentials: config.credentials,
     });
     const res = await s3.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
     const body = await res.Body?.transformToString('latin1');
@@ -156,7 +156,11 @@ describe('generate-cv', () => {
   it.skipIf(!inject('chromePath'))('produces a real PDF end to end with Chrome', async () => {
     const { version } = await setup();
     await processorWith((html) =>
-      htmlToPdf(html, { chromePath: inject('chromePath'), timeoutMs: 30_000, noSandbox: false }),
+      htmlToPdf(html, {
+        chromePath: inject('chromePath'),
+        timeoutMs: 30_000,
+        noSandbox: process.env.CHROME_NO_SANDBOX === 'true',
+      }),
     )(job(version.id));
     const pdf = await readObject(version.s3Key);
     expect(pdf.startsWith('%PDF-')).toBe(true);

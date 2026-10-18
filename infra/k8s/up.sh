@@ -43,45 +43,8 @@ for app in "${APPS[@]}"; do
   kind load docker-image "jobpilot/$app:$TAG" --name "$CLUSTER" >/dev/null
 done
 
-# 3. Render manifests with this tag, without editing committed files -----------
+# 3. Secrets, then render, migrate and roll out (shared with the AWS server) ----
 [[ -f "$OVERLAY/secrets.env" ]] || cp "$OVERLAY/secrets.env.example" "$OVERLAY/secrets.env"
-# Rendered next to the overlays (gitignored) so the relative path is stable.
-WORK="$ROOT/infra/k8s/.build"
-rm -rf "$WORK" && mkdir -p "$WORK"
-{
-  echo "apiVersion: kustomize.config.k8s.io/v1beta1"
-  echo "kind: Kustomization"
-  echo "resources: [../overlays/local]"  # Kustomize only accepts relative paths
-  echo "images:"
-  for app in "${APPS[@]}"; do echo "  - { name: jobpilot/$app, newTag: $TAG }"; done
-} > "$WORK/kustomization.yaml"
-kubectl kustomize --load-restrictor LoadRestrictionsNone "$WORK" > "$WORK/all.yaml"
-
-# Split: everything the apps depend on first, the workloads last.
-python3 - "$WORK" <<'PY'
-import sys, pathlib
-work = pathlib.Path(sys.argv[1])
-docs = [d for d in (work / "all.yaml").read_text().split("\n---\n") if d.strip()]
-is_app = lambda d: any(f"kind: {k}\n" in d for k in ("Deployment", "CronJob"))
-(work / "prepare.yaml").write_text("\n---\n".join(d for d in docs if not is_app(d)))
-(work / "apps.yaml").write_text("\n---\n".join(d for d in docs if is_app(d)))
-PY
-
-# 4. Migrate, then roll the apps ------------------------------------------------
-step "Applying config, secrets, services and gateway; running migrations"
-kubectl delete job migrate -n jobpilot --ignore-not-found >/dev/null  # Jobs are immutable
-kubectl apply -f "$WORK/prepare.yaml" >/dev/null
-if ! kubectl wait --for=condition=Complete job/migrate -n jobpilot --timeout=300s >/dev/null; then
-  echo "Migration failed:" >&2
-  kubectl logs job/migrate -n jobpilot >&2 || true
-  exit 1
-fi
-kubectl logs job/migrate -n jobpilot | tail -1
-
-step "Rolling out api, worker and web"
-kubectl apply -f "$WORK/apps.yaml" >/dev/null
-for deploy in api worker web; do
-  kubectl rollout status "deployment/$deploy" -n jobpilot --timeout=300s
-done
+"$ROOT/infra/k8s/apply.sh" local jobpilot "$TAG"
 
 step "Done: http://localhost:8080  (images tagged $TAG)"

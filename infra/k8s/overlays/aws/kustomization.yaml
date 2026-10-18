@@ -1,0 +1,102 @@
+# The AWS server (k3s on EC2). The server's deploy script writes config.env and
+# secrets.env from OpenTofu outputs and SSM Parameter Store, then runs
+# infra/k8s/apply.sh aws <ecr-prefix> <git-sha>.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jobpilot
+resources:
+  - ../../base
+  - redis.yaml
+  - envoy-proxy.yaml
+  - tls.yaml
+  - seed-job.yaml
+configMapGenerator:
+  - name: jobpilot-config
+    envs: [config.env]
+secretGenerator:
+  - name: jobpilot-secrets
+    envs: [secrets.env]
+# A 2 GB server (the free plan's limit): one api and one web pod instead of
+# two. Rollouts still start the new pod before stopping the old one
+# (maxSurge 1, maxUnavailable 0), so they still drop nothing.
+replicas:
+  - name: api
+    count: 1
+  - name: web
+    count: 1
+patches:
+  # The public hostname gets an HTTPS listener with a Let's Encrypt certificate;
+  # plain HTTP only redirects (see tls.yaml).
+  - target: { kind: Gateway, name: jobpilot }
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          cert-manager.io/cluster-issuer: letsencrypt
+      - op: replace
+        path: /spec/listeners
+        value:
+          - name: http
+            protocol: HTTP
+            port: 80
+            hostname: PUBLIC_HOST
+          - name: https
+            protocol: HTTPS
+            port: 443
+            hostname: PUBLIC_HOST
+            tls:
+              mode: Terminate
+              certificateRefs:
+                - name: jobpilot-tls
+  - target: { kind: HTTPRoute, name: web }
+    patch: |-
+      - op: add
+        path: /spec/hostnames
+        value: [PUBLIC_HOST]
+      - op: replace
+        path: /spec/parentRefs
+        value:
+          - name: jobpilot
+            sectionName: https
+  # RDS requires TLS; Node does not ship Amazon's RDS certificate authority.
+  # Every pod that talks to Postgres gets the bundle (ConfigMap rds-ca, created
+  # by the deploy script) at /etc/ssl/rds, and DATABASE_URL says
+  # sslmode=verify-full&sslrootcert=/etc/ssl/rds/global-bundle.pem.
+  - target: { kind: Deployment, name: '(api|worker)' }
+    patch: &rdsCa |-
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value: { name: rds-ca, configMap: { name: rds-ca } }
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value: { name: rds-ca, mountPath: /etc/ssl/rds, readOnly: true }
+  - target: { kind: Job }
+    patch: |-
+      - op: add
+        path: /spec/template/spec/volumes
+        value: [{ name: rds-ca, configMap: { name: rds-ca } }]
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts
+        value: [{ name: rds-ca, mountPath: /etc/ssl/rds, readOnly: true }]
+  - target: { kind: CronJob }
+    patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/volumes
+        value: [{ name: rds-ca, configMap: { name: rds-ca } }]
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/volumeMounts
+        value: [{ name: rds-ca, mountPath: /etc/ssl/rds, readOnly: true }]
+# Copy values from the generated config into the resources that need them.
+replacements:
+  - source: { kind: ConfigMap, name: jobpilot-config, fieldPath: data.PUBLIC_HOST }
+    targets:
+      - select: { kind: Gateway, name: jobpilot }
+        fieldPaths:
+          - spec.listeners.[name=http].hostname
+          - spec.listeners.[name=https].hostname
+      - select: { kind: HTTPRoute }
+        fieldPaths: [spec.hostnames.0]
+  - source: { kind: ConfigMap, name: jobpilot-config, fieldPath: data.ACME_EMAIL }
+    targets:
+      - select: { kind: ClusterIssuer, name: letsencrypt }
+        fieldPaths: [spec.acme.email]

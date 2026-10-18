@@ -81,7 +81,7 @@ describe('htmlToPdf', () => {
     const pdf = await htmlToPdf('<h1>Hello CV</h1>', {
       chromePath: inject('chromePath'),
       timeoutMs: 30_000,
-      noSandbox: false,
+      noSandbox: process.env.CHROME_NO_SANDBOX === 'true', // CI containers
     });
     expect(pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     expect(pdf.length).toBeGreaterThan(1_000);

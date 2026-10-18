@@ -1,0 +1,14 @@
+# On the server the gateway's Service is a LoadBalancer. k3s's built-in
+# ServiceLB answers it by listening on the machine's own ports 80 and 443.
+# "Local" keeps the visitor's IP address, which the login rate limit needs.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: jobpilot-proxy
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: LoadBalancer
+        externalTrafficPolicy: Local

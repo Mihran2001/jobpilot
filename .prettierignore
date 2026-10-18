@@ -2,3 +2,5 @@ dist
 pnpm-lock.yaml
 packages/db/src/generated
 packages/db/prisma/migrations
+infra/aws/.terraform
+infra/k8s/.build

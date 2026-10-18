@@ -122,3 +122,24 @@ Start the cluster first: `pnpm infra:up && pnpm k8s:up`.
       Watch `kubectl get pods -n jobpilot -w`: the Deployment starts a new pod.
       Does the CV still become READY? How long did it take, and which BullMQ
       setting from stage 3 explains it?
+
+## Stage 6: AWS
+
+- [ ] **Read a plan before you trust it.** Run `tofu plan` in `infra/aws` and
+      find, in its output: the security group rule that lets the database
+      accept connections (from whom?), the one setting that makes pods able
+      to use the instance's IAM role (hint: `metadata_options`), and why
+      there is no NAT gateway. Then run `tofu plan` again after `tofu apply`:
+      it should say "No changes". What would make it not say that?
+- [ ] **Prove the database is not public.** From your Mac,
+      `nc -vz -w 5 $(aws rds describe-db-instances --profile jobpilot --query 'DBInstances[0].Endpoint.Address' --output text) 5432`
+      should time out. Then open a shell on the server
+      (`aws ssm start-session --target <instance_id> --profile jobpilot`) and
+      run the same command there: it connects. Which two resources in
+      `security.tf` and `network.tf` make the difference?
+- [ ] **Stop paying while you sleep.** Write `infra/aws/pause.sh` and
+      `resume.sh` that stop and start the instance and the database with the
+      AWS CLI (`aws ec2 stop-instances`, `aws rds stop-db-instance`, and their
+      start counterparts). After resume, does the app come back by itself?
+      Does the Elastic IP (and so the sslip.io hostname and certificate) stay
+      the same? Check the cost difference a day later in Cost Explorer.
