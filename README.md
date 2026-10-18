@@ -141,7 +141,7 @@ browser ──> Next.js server ──> NestJS API ──> Postgres / Redis / sto
 
 - **Session.** The login Server Action calls `POST /api/auth/login`, takes the token from the API's `Set-Cookie`, and sets the same `httpOnly` cookie on the web app's domain. Every Server Component and Server Action calls the API through `src/lib/api.ts`, which forwards that cookie, adds an `x-request-id`, applies a 15 s timeout, and turns a 401 into a redirect to `/login`. `src/proxy.ts` (Next.js 16's name for middleware) only does the optimistic "no cookie at all, go to login" check.
 - **Cache Components.** Pages prerender a static shell (navigation) and stream the per-user content in behind `<Suspense>` (`loading.tsx`), as Next.js 16 requires for anything reading cookies.
-- **Pages.** `/listings` (filters in the URL, cursor pagination, score, attribution link), `/listings/[id]`, `/applications` (board, status menu with optimistic update and rollback on 409), `/applications/[id]` (history, notes, CVs: generate, upload, download), `/cv-profile`.
+- **Pages.** `/listings` (filters in the URL, cursor pagination, score, attribution link), `/listings/[id]`, `/applications` (board, status menu with optimistic update and rollback on 409), `/applications/[id]` (history, notes, CVs: generate, upload, download), `/cv-profile`, `/register` (then onboarding on `/settings`), `/settings` (skills, roles, minimum salary; account deletion), `/alerts` and `/alerts/[id]` (saved searches and their new matches; the nav shows the unseen count).
 - **Route handlers.** `/cv-versions/[id]/download` redirects to a 5-minute storage URL; `/exports/applications.csv` passes the API's stream through without buffering.
 - **Third-party HTML** (listing descriptions) is reduced to text blocks and rendered as text, never injected.
 
@@ -149,45 +149,63 @@ browser ──> Next.js server ──> NestJS API ──> Postgres / Redis / sto
 
 All routes are under `/api` and need a session cookie unless marked public.
 
-| Method and path                            | What it does                                                                                                   |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `GET /health` (public)                     | 200 if the database answers, 503 otherwise                                                                     |
-| `POST /auth/register` (public)             | Create an account and start a session                                                                          |
-| `POST /auth/login` (public)                | Start a session. Rate-limited per IP                                                                           |
-| `POST /auth/logout`                        | End this session                                                                                               |
-| `GET /users/me`                            | The logged-in user                                                                                             |
-| `GET /sources`                             | Listing sources                                                                                                |
-| `GET /listings`                            | Newest first, keyset-paginated. Filters: `q`, `remote`, `minSalary`, `sourceId`, `minScore`; `limit`, `cursor` |
-| `GET /listings/:id`                        | One listing with its description and your score                                                                |
-| `POST /applications`                       | Save a listing as an application (status `SAVED`)                                                              |
-| `GET /applications`                        | Your applications plus a count per status; filter with `status`                                                |
-| `GET /applications/:id`                    | One application with its status history                                                                        |
-| `PATCH /applications/:id`                  | Edit notes (`null` clears them)                                                                                |
-| `GET /cv-profile`, `PUT /cv-profile`       | Your base CV (JSON, validated by `cvProfileSchema`)                                                            |
-| `POST /applications/:id/cv`                | Queue a CV tailored to that listing; answers 202 with a `PENDING` version                                      |
-| `GET /cv-versions`, `GET /cv-versions/:id` | Your CVs and their status (`PENDING`, `READY`, `FAILED`)                                                       |
-| `GET /cv-versions/:id/download`            | A 5-minute presigned URL straight to storage                                                                   |
-| `POST /cv-versions/uploads`                | Start an upload: returns a presigned PUT for exactly this type and size                                        |
-| `POST /cv-versions/:id/complete-upload`    | Verify the uploaded object (size, `%PDF-` signature) and mark it `READY`                                       |
-| `GET /exports/applications.csv`            | Your application history, streamed through a database cursor                                                   |
-| `PATCH /applications/:id/status`           | Move to a new status; records an event in the same transaction                                                 |
+| Method and path                               | What it does                                                                                                   |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `GET /health` (public)                        | 200 if the database answers, 503 otherwise                                                                     |
+| `POST /auth/register` (public)                | Create an account and start a session                                                                          |
+| `POST /auth/login` (public)                   | Start a session. Rate-limited per IP                                                                           |
+| `POST /auth/logout`                           | End this session                                                                                               |
+| `GET /users/me`                               | The logged-in user                                                                                             |
+| `DELETE /users/me`                            | Delete the account, its data and files. Needs the password (403 if wrong); rate-limited like login             |
+| `GET /skill-profile`, `PUT /skill-profile`    | Your skills, roles and minimum salary. Saving queues a rescore of every listing for you                        |
+| `GET /saved-searches`, `POST /saved-searches` | Your saved searches (at most 20) with their count of new matches                                               |
+| `DELETE /saved-searches/:id`                  | Delete a saved search                                                                                          |
+| `GET /saved-searches/:id/matches`             | Listings that matched after the search was saved; `POST /saved-searches/:id/seen` marks them seen              |
+| `GET /alerts/summary`                         | Count of unseen matches, for the nav badge                                                                     |
+| `GET /sources`                                | Listing sources                                                                                                |
+| `GET /listings`                               | Newest first, keyset-paginated. Filters: `q`, `remote`, `minSalary`, `sourceId`, `minScore`; `limit`, `cursor` |
+| `GET /listings/:id`                           | One listing with its description and your score                                                                |
+| `POST /applications`                          | Save a listing as an application (status `SAVED`)                                                              |
+| `GET /applications`                           | Your applications plus a count per status; filter with `status`                                                |
+| `GET /applications/:id`                       | One application with its status history                                                                        |
+| `PATCH /applications/:id`                     | Edit notes (`null` clears them)                                                                                |
+| `GET /cv-profile`, `PUT /cv-profile`          | Your base CV (JSON, validated by `cvProfileSchema`)                                                            |
+| `POST /applications/:id/cv`                   | Queue a CV tailored to that listing; answers 202 with a `PENDING` version, 429 past `CV_DAILY_LIMIT` a day     |
+| `GET /cv-versions`, `GET /cv-versions/:id`    | Your CVs and their status (`PENDING`, `READY`, `FAILED`)                                                       |
+| `GET /cv-versions/:id/download`               | A 5-minute presigned URL straight to storage                                                                   |
+| `POST /cv-versions/uploads`                   | Start an upload: returns a presigned PUT for exactly this type and size                                        |
+| `POST /cv-versions/:id/complete-upload`       | Verify the uploaded object (size, `%PDF-` signature) and mark it `READY`                                       |
+| `GET /exports/applications.csv`               | Your application history, streamed through a database cursor                                                   |
+| `PATCH /applications/:id/status`              | Move to a new status; records an event in the same transaction                                                 |
 
 Request and response shapes are the Zod schemas in `packages/shared`.
 
 ## Worker
 
-`apps/worker` is a plain Node process (no Nest) running two BullMQ queues:
+`apps/worker` is a plain Node process (no Nest) running these BullMQ queues:
 
 | Queue           | What a job does                                                                                       | Retries                                      |
 | --------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | `fetch-source`  | Fetches one source, upserts every listing on `(source_id, external_id)`, queues scoring for the batch | 5 attempts, 1/2/4/8 min backoff              |
-| `score-listing` | Scores one listing for one user and upserts `listing_scores`                                          | 3 attempts; deduplicated per (user, listing) |
+| `score-listing` | Scores one listing for one user, upserts `listing_scores`, records saved-search matches (alerts)      | 3 attempts; deduplicated per (user, listing) |
+| `rescore-user`  | Queues `score-listing` for every listing, after a user changes their skills                           | 3 attempts; deduplicated per user            |
+| `generate-cv`   | Renders a tailored CV with Chrome and uploads the PDF (below)                                         | 2 attempts                                   |
 
 - **Schedule.** In Kubernetes, the `fetch-sources` CronJob enqueues fetches every 6 hours (see below). Locally, run `pnpm fetch:now` when you want fresh listings.
 - **Fetch now.** `pnpm fetch:now` or `pnpm fetch:now remotive`. Mind the limits below.
 - **Failed jobs.** Bull Board on http://127.0.0.1:3002 lists failed jobs, their errors and attempts, and can retry them. 4xx responses (except 429) and malformed responses fail immediately instead of using up retries.
 - **Kill-safety.** A job cut off by a crash keeps its lock until it expires (30 s); the next stalled check (every 30 s) moves it back to waiting, so it is re-run within about a minute. Every job is idempotent, so running it twice is harmless.
 - **Graceful shutdown.** `SIGTERM`/`SIGINT` stop new work, let running jobs finish (up to 25 s), then close queues, Redis and Prisma.
+
+### Multi-user (stage 7)
+
+Listings are shared; everything else is per user and every query is scoped by `user_id`.
+
+- **Scores.** Each user has a skill profile; `score-listing` runs per (user, listing). Two users see different scores for the same listing (Data Engineer: 18 for the seeded full-stack profile, 100 for a Python/Airflow profile).
+- **Alerts (in-app only).** A saved search stores filters (`q`, `remote`, `minSalary`, `minScore`). When a listing is scored for a user, it is checked against that user's searches; a match is recorded in `search_matches` only if the listing arrived after the search was saved, so saving a search does not flood you with old listings. No email: nothing to send, no deliverability or unsubscribe rules to handle.
+- **Quota.** `CV_DAILY_LIMIT` (default 20) generated CVs per user per UTC day. The count and the insert run under a per-user Postgres advisory lock, so parallel requests cannot all pass on the same count.
+- **Deletion.** `DELETE /users/me` removes the user's files under `users/<id>/` in storage, then the user row; foreign keys cascade to sessions, profiles, scores, applications and their events, CVs and saved searches. Shared listings stay.
+- **Attribution.** Every listing shows its source name and links to the original posting, as the sources' terms require.
 
 ### CV generation
 

@@ -143,3 +143,26 @@ Start the cluster first: `pnpm infra:up && pnpm k8s:up`.
       start counterparts). After resume, does the app come back by itself?
       Does the Elastic IP (and so the sslip.io hostname and certificate) stay
       the same? Check the cost difference a day later in Cost Explorer.
+
+## Stage 7: Multi-user
+
+- [ ] **Break the quota, then read why it holds.** In `apps/api/src/modules/cv/cv.repository.ts`,
+      comment out the `pg_advisory_xact_lock` line and run
+      `pnpm --filter @jobpilot/api test -- multi-user`. The test fires six
+      requests at once against a limit of 2: how many get through now? Put
+      the line back. Then explain why the lock has to be inside the same
+      transaction as the count and the insert, and what `hashtextextended`
+      is for.
+- [ ] **Index the alert badge.** The nav runs `GET /alerts/summary` on every
+      page. Seed 50 saved searches and 100k `search_matches` for one user
+      (a `generate_series` insert in psql), run `EXPLAIN ANALYZE` on the
+      query Prisma logs for the summary, then decide whether a partial index
+      `ON search_matches (saved_search_id) WHERE seen_at IS NULL` helps.
+      Keep it only if the plan and timing say so, as a real migration.
+- [ ] **Prove the isolation yourself.** Register two users in the browser
+      (two browser profiles, or one private window). As user A, save a
+      search and open an application; copy their ids from the URL. As user
+      B, open `/alerts/<A's search id>` and `/applications/<A's id>`, and
+      call `curl -X POST .../api/saved-searches/<id>/seen` with B's cookie.
+      Every one must be 404, not 403. Why 404? Then delete user B and check
+      in psql that none of B's rows are left and A's are untouched.
