@@ -33,6 +33,10 @@ connection.on('error', (err) => logger.warn({ err }, 'Redis connection error'));
 const queues = createQueues(connection);
 const adapters = createAdapterRegistry(fetch);
 
+// Before any Worker exists: otherwise a scheduled fetch that is already due
+// would be picked up the moment a worker starts.
+await removeFetchSchedulers(queues.fetchSource, logger);
+
 const workers = [
   // One fetch at a time: these are other people's servers.
   new Worker(
@@ -77,8 +81,6 @@ for (const worker of workers) {
   // would treat them as unhandled.
   worker.on('error', (err) => logger.error({ queue: worker.name, err }, 'Worker error'));
 }
-
-await removeFetchSchedulers(queues.fetchSource, logger);
 
 let board: Board | undefined;
 if (config.BULL_BOARD_PORT > 0) {

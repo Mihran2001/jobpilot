@@ -115,13 +115,19 @@ describe('pipeline through BullMQ', () => {
     ).toEqual(['Full Stack Developer (React, Node.js)', 'Senior Node.js Engineer']);
   });
 
-  it('removes BullMQ fetch schedulers left over from before the CronJob', async () => {
+  it('removes leftover BullMQ fetch schedulers and the jobs they already queued', async () => {
+    // Close the workers first, so nothing picks the queued jobs up during the test.
+    await Promise.all(workers.map((w) => w.close()));
     await queues.fetchSource.upsertJobScheduler('fetch-remotive', { every: 6 * 3_600_000 });
     await queues.fetchSource.upsertJobScheduler('fetch-jobicy', { every: 6 * 3_600_000 });
+    await queues.fetchSource.add('fetch', { sourceId: 'manual' }); // not from a scheduler: kept
+    expect(await queues.fetchSource.getWaitingCount()).toBe(3);
 
     await removeFetchSchedulers(queues.fetchSource, silentLogger);
     await removeFetchSchedulers(queues.fetchSource, silentLogger); // a second start: nothing to do
 
     expect(await queues.fetchSource.getJobSchedulers()).toEqual([]);
+    const waiting = await queues.fetchSource.getWaiting();
+    expect(waiting.map((j) => j.data)).toEqual([{ sourceId: 'manual' }]);
   });
 });
