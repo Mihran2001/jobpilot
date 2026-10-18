@@ -53,7 +53,7 @@ describe('generate-cv', () => {
       endpoint: config.endpoint,
       region: config.region,
       forcePathStyle: true,
-      credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+      credentials: config.credentials,
     });
     const res = await s3.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
     const body = await res.Body?.transformToString('latin1');

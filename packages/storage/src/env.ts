@@ -8,8 +8,12 @@ export const storageEnvSchema = z.object({
   /** Host the browser uses for presigned URLs; defaults to S3_ENDPOINT. */
   S3_PUBLIC_ENDPOINT: z.url().optional(),
   S3_REGION: z.string().min(1).default('us-east-1'),
-  S3_ACCESS_KEY_ID: z.string().min(1),
-  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  /**
+   * Static keys, for MinIO. Leave both unset on AWS: the SDK then uses the
+   * IAM role of the machine it runs on (temporary credentials, no secrets).
+   */
+  S3_ACCESS_KEY_ID: z.string().min(1).optional(),
+  S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   S3_BUCKET: z.string().min(3),
   S3_FORCE_PATH_STYLE: z.stringbool().default(false),
   /** Create the bucket on start. Local development only. */
@@ -23,8 +27,10 @@ export function storageConfigFromEnv(env: StorageEnv): StorageConfig {
     endpoint: env.S3_ENDPOINT,
     publicEndpoint: env.S3_PUBLIC_ENDPOINT,
     region: env.S3_REGION,
-    accessKeyId: env.S3_ACCESS_KEY_ID,
-    secretAccessKey: env.S3_SECRET_ACCESS_KEY,
+    credentials:
+      env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
+        ? { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY }
+        : undefined,
     bucket: env.S3_BUCKET,
     forcePathStyle: env.S3_FORCE_PATH_STYLE,
   };

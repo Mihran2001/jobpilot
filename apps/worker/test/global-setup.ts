@@ -34,8 +34,10 @@ function testStorageConfig(bucket: string) {
   return {
     endpoint: process.env.S3_ENDPOINT,
     region: process.env.S3_REGION ?? 'us-east-1',
-    accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
+    },
     bucket,
     forcePathStyle: true,
   };

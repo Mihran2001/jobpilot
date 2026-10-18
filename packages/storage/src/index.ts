@@ -19,8 +19,8 @@ export interface StorageConfig {
    */
   publicEndpoint?: string;
   region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  /** Static keys (MinIO). Undefined: the SDK's default chain, e.g. an IAM role. */
+  credentials?: { accessKeyId: string; secretAccessKey: string };
   bucket: string;
   /** MinIO needs path-style URLs (http://host/bucket/key). */
   forcePathStyle: boolean;
@@ -69,7 +69,7 @@ function createClient(config: StorageConfig, endpoint: string | undefined): S3Cl
     endpoint,
     region: config.region,
     forcePathStyle: config.forcePathStyle,
-    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    credentials: config.credentials,
     // Every network call gets a timeout. The SDK also retries (3 attempts by
     // default), which is safe here: every call is idempotent.
     requestHandler: { connectionTimeout: 3_000, requestTimeout: 15_000 },
